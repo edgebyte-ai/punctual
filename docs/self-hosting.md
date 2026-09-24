@@ -343,6 +343,8 @@ rather than take our word for it.
 
 ## Troubleshooting
 
+Optional SMS is independent of email and disabled by default. See [Telnyx SMS](telnyx-sms.md) to use an eligible existing number through Hosted SMS or a new verified toll-free number. Notifications run inside this Worker; no additional SMS bridge service is required.
+
 **"unverified app" on Google sign-in.** Expected until Google finishes
 verification. Add yourself as a test user on the consent screen.
 

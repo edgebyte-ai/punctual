@@ -15,6 +15,7 @@ import type { Booking, EventType, User, WebhookEvent } from '../core/domain/type
 import type { EnginePorts } from '../ports.js'
 import { calendarDescription, calendarTitle, participantsFor } from '../core/domain/calendar-text.js'
 import { hostSettings } from '../core/domain/hosts.js'
+import { isE164, smsRecipient } from '../core/domain/sms.js'
 import {
   bookingCancelled,
   bookingConfirmationForGuest,
@@ -147,6 +148,7 @@ export async function notifyBookingCreated(ctx: NotifyContext): Promise<void> {
       })
       .catch((err) => console.error('[punctual] host notification failed to queue', err)),
     notifyWebhooks(ports, 'booking.created', booking, eventType),
+    notifySms(ports, booking, eventType, 'confirmed', manageUrl),
   ])
 }
 
@@ -377,6 +379,7 @@ export async function notifyBookingCancelled(ctx: {
       })
       .catch((err) => console.error('[punctual] host cancellation failed to queue', err)),
     notifyWebhooks(ports, 'booking.cancelled', booking, eventType),
+    notifySms(ports, booking, eventType, 'cancelled'),
   ])
 }
 
@@ -457,7 +460,23 @@ export async function notifyBookingRescheduled(ctx: {
       })
       .catch((err) => console.error('[punctual] host reschedule mail failed to queue', err)),
     notifyWebhooks(ports, 'booking.rescheduled', booking, eventType),
+    notifySms(ports, booking, eventType, 'rescheduled', manageUrl),
   ])
+}
+
+async function notifySms(ports: EnginePorts, booking: Booking, eventType: EventType, action: 'confirmed' | 'rescheduled' | 'cancelled', manageUrl?: string): Promise<void> {
+  const to = smsRecipient(ports, eventType, booking.answers)
+  if (!ports.sms || to === null || !isE164(to) || (action !== 'cancelled' && !manageUrl)) return
+  // ponytail: one best-effort attempt inside the existing confirmation claim; add an outbox only if delivery tracking/retries become required.
+  try {
+    const when = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: booking.guestTimezone }).format(booking.startUtc)
+    const title = eventType.title.replace(/\s+/g, ' ').slice(0, 80)
+    const brand = ports.config.brandName.replace(/\s+/g, ' ').slice(0, 60)
+    await ports.sms.send({ to, text: `${brand}: ${title} ${action} for ${when} (${booking.guestTimezone}).${manageUrl ? ` Manage or cancel: ${manageUrl}` : ''} Reply STOP to opt out.` })
+  } catch {
+    // Even an injected sender must not leak guest data/provider responses into logs.
+    console.error('[punctual] guest SMS notification failed; booking and email are unchanged')
+  }
 }
 
 /**

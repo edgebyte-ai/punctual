@@ -27,6 +27,9 @@
     "SUPPORT_EMAIL": "admin@sunnyvale.local.test",
     "SIGNUPS": "closed",
     "EMAIL_PROVIDER": "console",
+    "SMS_PROVIDER": "none",
+    "SMS_PHONE_QUESTION_ID": "phone",
+    "SMS_CONSENT_QUESTION_ID": "sms_consent",
     "BLOG_ENABLED": "1",
     "TELEMETRY_ENABLED": "0"
   }

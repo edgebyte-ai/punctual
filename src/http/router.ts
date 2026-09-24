@@ -63,6 +63,7 @@ export function buildRouter(ports: EnginePorts, slots: SlotService): Hono<{ Bind
   app.get('/health', (c) => {
     const warnings: string[] = []
     if (ports.config.emailProblem) warnings.push(`email_provider_unavailable: ${ports.config.emailProblem}`)
+    if (ports.config.smsProblem) warnings.push(`sms_provider_unavailable: ${ports.config.smsProblem}`)
     if (ports.config.emailDelivery === 'console') {
       // The cause named honestly: with EMAIL_PROVIDER set, the keys may well
       // be there — it is the named sender that cannot be used.
@@ -78,6 +79,7 @@ export function buildRouter(ports: EnginePorts, slots: SlotService): Hono<{ Bind
       ok: true,
       service: 'punctual',
       emailDelivery: ports.config.emailDelivery,
+      smsDelivery: ports.config.smsDelivery ?? 'none',
       warnings,
     })
   })

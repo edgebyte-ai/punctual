@@ -97,6 +97,13 @@ crons = ["*/5 * * * *"]
 # custom domain. Used in every link the engine writes into emails and .ics.
 BASE_URL = "https://punctual.YOUR-SUBDOMAIN.workers.dev"
 BRAND_NAME = "Punctual"
+# Optional SMS, independent of email/blog. Credentials are Worker secrets.
+SMS_PROVIDER = "none"
+# TELNYX_FROM = "+18005550100"
+# TELNYX_MESSAGING_PROFILE_ID = "your-profile-id"
+# SMS_PHONE_QUESTION_ID = "your-phone-question-id"
+# SMS_CONSENT_QUESTION_ID = "your-consent-question-id"
+# See docs/telnyx-sms.md for Hosted SMS and toll-free number setup.
 # Optional per-instance blog. Keep 0/unset for apps that do not need it.
 #BLOG_ENABLED = "1"
 # Optional: the legal entity named on /privacy and /terms (defaults to

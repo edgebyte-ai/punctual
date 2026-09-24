@@ -644,6 +644,11 @@ export interface EmailMessage {
   replyTo?: string
 }
 
+/** Optional, best-effort guest notifications; provider acceptance is not delivery. */
+export interface SmsSender {
+  send(message: { to: string; text: string }): Promise<void>
+}
+
 // ---------------------------------------------------------------------------
 // Crypto
 // ---------------------------------------------------------------------------
@@ -910,6 +915,11 @@ export interface EngineConfig {
    * sentence, for /health and the dashboard. Absent when all is well.
    */
   emailProblem?: string
+  /** SMS stays off unless an explicitly selected provider is fully configured. */
+  smsDelivery?: 'none' | 'telnyx'
+  smsProblem?: string
+  smsPhoneQuestionId?: string
+  smsConsentQuestionId?: string
   /** Off unless explicitly enabled (ADR-0006 §5). */
   telemetryEnabled: boolean
   /** Abuse-limit overrides; operator-tunable. */
@@ -940,6 +950,7 @@ export interface EnginePorts {
   calendars: CalendarProviders
   oauth: OAuthCredentials
   email: EmailSender
+  sms?: SmsSender
   crypto: Crypto
   cache: Cache
   blobCache: BlobCache

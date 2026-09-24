@@ -23,6 +23,12 @@
   // A configured email provider is required for real customer notifications.
   "vars": {
     "EMAIL_PROVIDER": "resend",
+    // Enable only after the sending number is approved; key is a Worker secret.
+    "SMS_PROVIDER": "none",
+    "TELNYX_FROM": "",
+    "TELNYX_MESSAGING_PROFILE_ID": "",
+    "SMS_PHONE_QUESTION_ID": "phone",
+    "SMS_CONSENT_QUESTION_ID": "sms_consent",
     "BASE_URL": "",
     "BRAND_NAME": "Sunnyvale Discount Smog",
     "LEGAL_OPERATOR": "",

@@ -44,6 +44,7 @@ import { authenticateApiKey } from '../../core/domain/auth-flows.js'
 import { parseApiKey } from '../../core/domain/auth-service.js'
 import { effectiveQuestions, isValidEmail, pickDeclaredAnswers, validateAnswers } from '../../core/domain/booking-service.js'
 import { notifyBookingCancelled } from '../../adapters/notify.js'
+import { smsSettings } from '../../core/domain/sms.js'
 import { dispatchConfirmation } from '../../adapters/queue/consumer.js'
 import { formatInZone, isValidTimeZone, localDateString } from '../../core/time/zone.js'
 
@@ -669,7 +670,7 @@ export function buildApiRoutes(ports: EnginePorts, slots: SlotService): Hono<Api
     const { repos, user } = c.get('auth')
     const et = await repos.eventTypes.byId(c.req.param('id'))
     if (!et || !(await ownsEventType(repos, user, et))) return notFound('event type')
-    return c.json({ data: await eventTypeWithHosts(repos, user, et) })
+    return c.json({ data: await eventTypeWithHosts(repos, user, et), notifications: { sms: smsSettings(ports, et) } })
   })
 
   app.patch('/event-types/:id', async (c) => {

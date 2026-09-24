@@ -23,6 +23,7 @@ import { dayRange, resolveSchedule } from '../engine.js'
 import { hostSettings } from '../core/domain/hosts.js'
 import { needsReconnect } from './oauth.js'
 import { dispatchConfirmation } from './queue/consumer.js'
+import { isE164, smsRecipient } from '../core/domain/sms.js'
 import type { HostAvailabilityInput } from '../core/slots/engine.js'
 
 export interface CoordinatorDeps {
@@ -106,6 +107,10 @@ export function createCoordinator(deps: CoordinatorDeps): HostCoordinator {
       try {
         const eventType = await repos.eventTypes.byId(request.eventTypeId)
         if (!eventType) return { ok: false, reason: 'policy', detail: 'unknown event type' }
+        const smsPhone = smsRecipient(ports, eventType, request.answers)
+        if (smsPhone !== null && !isE164(smsPhone)) {
+          return { ok: false, reason: 'policy', detail: 'SMS notifications require a phone number in international E.164 format, e.g. +16505550123.' }
+        }
 
         // ---- Leases for collective (ADR-0002 §3) ----------------------------
         // Ascending host id order makes deadlock impossible: every caller

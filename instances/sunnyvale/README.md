@@ -35,3 +35,9 @@ The local config's fake resource IDs and `.test` email addresses are intentional
 7. Add/publish articles in `/dashboard/blog`. Production is intentionally not seeded with a fictional owner, local key or example posts. Review the website and a real booking/cancellation round trip before directing customer traffic to it.
 
 The exact provisioning/deployment commands are in upstream `docs/self-hosting.md`. This directory contains no account IDs, real addresses or live credentials. No production deployment is performed by the local bootstrap.
+
+## Optional Telnyx SMS
+
+See [Telnyx setup](../../docs/telnyx-sms.md) for either an eligible existing Hosted SMS number or a verified new toll-free number. Both use the same sending API inside this Punctual Worker. Set `SMS_PROVIDER="telnyx"`, the approved `TELNYX_FROM`, optional messaging profile ID, and the two real question IDs; put `TELNYX_API_KEY` in a Worker secret. The template keeps SMS off.
+
+Add a phone text question and a separate optional SMS consent select with options `No` and `Yes`. The local bootstrap adds `sms_consent`; production IDs must come from the actual event type. Native bookings and staff-created bookings use these same questions. No consent means no SMS. The Sunnyvale website's `SMS_PROVIDER="punctual"` reads these settings from the event API and never holds the Telnyx key or sends a second text.

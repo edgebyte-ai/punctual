@@ -22,7 +22,7 @@ import { buildDashboardRoutes } from '../../src/http/dashboard-routes.js'
 import { createApiKey } from '../../src/core/domain/auth-flows.js'
 import { changeBookingHosts } from '../../src/core/domain/booking-hosts.js'
 import type { EnginePorts } from '../../src/ports.js'
-import type { EventType, User } from '../../src/core/domain/types.js'
+import type { EventType, EventTypeQuestion, User } from '../../src/core/domain/types.js'
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -58,6 +58,27 @@ function testPorts(): EnginePorts {
   } as Env)
 }
 
+function smsPorts(): EnginePorts {
+  return buildPorts({
+    ...env,
+    BASE_URL: 'https://punctual.test',
+    ENCRYPTION_KEY_V1: keyMaterial(1),
+    SIGNING_KEY: keyMaterial(9),
+    SMS_PROVIDER: 'telnyx',
+    TELNYX_API_KEY: 'test-telnyx-key',
+    TELNYX_FROM: '+16505550123',
+    SMS_PHONE_QUESTION_ID: 'phone',
+    SMS_CONSENT_QUESTION_ID: 'sms_consent',
+  } as Env)
+}
+
+function smsQuestions(): EventTypeQuestion[] {
+  return [
+    { id: 'phone', label: 'Mobile phone', type: 'text', required: false },
+    { id: 'sms_consent', label: 'Text me updates', type: 'select', required: false, options: ['No', 'Yes'] },
+  ]
+}
+
 /** The engine's own mounting: the API at /api/v1, MCP at /mcp, embed at the root. */
 function buildApp(ports: EnginePorts): Hono {
   const slots = createSlotService(ports)
@@ -84,7 +105,11 @@ let seedCounter = 0
  * Weekdays 09:00–17:00 UTC, so any window of a week contains bookable days
  * without the test having to know today's date.
  */
-async function seedHost(ports: EnginePorts, scopes: string[] = ['*']): Promise<Seeded> {
+async function seedHost(
+  ports: EnginePorts,
+  scopes: string[] = ['*'],
+  questions: EventTypeQuestion[] = [],
+): Promise<Seeded> {
   const n = ++seedCounter
   const repos = ports.repositories({ consistency: 'bookmark' })
   const user = await repos.users.create({
@@ -129,7 +154,7 @@ async function seedHost(ports: EnginePorts, scopes: string[] = ['*']): Promise<S
     maxPerDay: null,
     locationType: 'custom_link',
     locationValue: 'https://meet.punctual.test/room',
-    questions: [],
+    questions,
     active: true,
     scheduleId: null,
   })
@@ -425,6 +450,44 @@ describe('event types', () => {
       headers: auth(mine.apiKey),
     })
     expect(res.status).toBe(404)
+  })
+
+  it('reports SMS metadata only when a sender and valid opt-in questions are configured', async () => {
+    const ports = smsPorts()
+    const app = buildApp(ports)
+    const seed = await seedHost(ports, ['*'], smsQuestions())
+
+    const res = await app.request(`/api/v1/event-types/${seed.eventType.id}`, { headers: auth(seed.apiKey) })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      notifications: { sms: { enabled: boolean; phoneQuestionId: string | null; consentQuestionId: string | null } }
+    }
+    expect(body.notifications.sms).toEqual({ enabled: true, phoneQuestionId: 'phone', consentQuestionId: 'sms_consent' })
+    expect(JSON.stringify(body)).not.toContain('test-telnyx-key')
+  })
+
+  it('keeps SMS metadata disabled without a sender or without matching questions', async () => {
+    const noSender = testPorts()
+    const noSenderApp = buildApp(noSender)
+    const noSenderSeed = await seedHost(noSender, ['*'], smsQuestions())
+    const noSenderResponse = await noSenderApp.request(`/api/v1/event-types/${noSenderSeed.eventType.id}`, { headers: auth(noSenderSeed.apiKey) })
+    expect(((await noSenderResponse.json()) as { notifications: { sms: unknown } }).notifications.sms).toEqual({
+      enabled: false,
+      phoneQuestionId: null,
+      consentQuestionId: null,
+    })
+
+    const missingQuestions = smsPorts()
+    const missingQuestionsApp = buildApp(missingQuestions)
+    const missingQuestionsSeed = await seedHost(missingQuestions)
+    const missingQuestionsResponse = await missingQuestionsApp.request(`/api/v1/event-types/${missingQuestionsSeed.eventType.id}`, {
+      headers: auth(missingQuestionsSeed.apiKey),
+    })
+    expect(((await missingQuestionsResponse.json()) as { notifications: { sms: unknown } }).notifications.sms).toEqual({
+      enabled: false,
+      phoneQuestionId: null,
+      consentQuestionId: null,
+    })
   })
 })
 
@@ -970,6 +1033,29 @@ describe('team event types through the API', () => {
 })
 
 describe('POST /bookings', () => {
+  it('rejects an opted-in SMS number that is not E.164 before creating a booking', async () => {
+    const ports = smsPorts()
+    const app = buildApp(ports)
+    const seed = await seedHost(ports, ['*'], smsQuestions())
+    const slot = await firstSlot(app, seed.apiKey, seed.eventType.id)
+
+    const res = await app.request('/api/v1/bookings', {
+      method: 'POST',
+      headers: { ...auth(seed.apiKey), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        eventTypeId: seed.eventType.id,
+        start: slot.start.iso,
+        guestName: 'SMS Guest',
+        guestEmail: 'sms@example.com',
+        guestTimezone: 'UTC',
+        answers: { phone: '6505550123', sms_consent: 'Yes' },
+      }),
+    })
+
+    expect(res.status).toBe(422)
+    expect(((await res.json()) as { detail: string }).detail).toContain('E.164')
+  })
+
   it('returns working guest links only on creation and cancels only after a guest POST', async () => {
     const ports = testPorts()
     const app = buildApp(ports)

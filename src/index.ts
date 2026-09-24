@@ -17,6 +17,7 @@ import { createKvBlobCache } from './adapters/cache/kv-blob.js'
 import { createR2BlobStorage } from './adapters/storage/r2-blob.js'
 import { createBrevoSender, createCloudflareSender, createConsoleSender, createResendSender } from './adapters/email/index.js'
 import { selectEmailDelivery } from './adapters/email/select.js'
+import { createTelnyxSender, selectSmsDelivery } from './adapters/sms.js'
 import { createEnvOAuthCredentials } from './adapters/oauth.js'
 import { createCalendarProviders } from './adapters/providers.js'
 import { createCoordinator } from './adapters/coordinator.js'
@@ -61,6 +62,12 @@ export interface Env {
   EMAIL_PROVIDER?: string
   RESEND_API_KEY?: string
   BREVO_API_KEY?: string
+  SMS_PROVIDER?: string
+  TELNYX_API_KEY?: string
+  TELNYX_FROM?: string
+  TELNYX_MESSAGING_PROFILE_ID?: string
+  SMS_PHONE_QUESTION_ID?: string
+  SMS_CONSENT_QUESTION_ID?: string
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string
   MICROSOFT_CLIENT_ID?: string
@@ -168,12 +175,20 @@ export function buildPorts(env: Env): EnginePorts {
     await handleOne(message, portsRef)
   })
   const rateLimiter = createRateLimiterAdapter(env.RATE_LIMITER)
+  const { delivery: smsDelivery, problem: smsProblem } = selectSmsDelivery(env)
+  const sms = smsDelivery === 'telnyx' ? createTelnyxSender({
+    apiKey: env.TELNYX_API_KEY!.trim(),
+    from: env.TELNYX_FROM!.trim(),
+    ...(env.TELNYX_MESSAGING_PROFILE_ID?.trim() ? { messagingProfileId: env.TELNYX_MESSAGING_PROFILE_ID.trim() } : {}),
+  }) : undefined
+  if (smsProblem) console.warn(`[punctual] ${smsProblem}. See /health.`)
 
   const ports: EnginePorts = {
     repositories,
     calendars,
     oauth,
     email,
+    ...(sms ? { sms } : {}),
     crypto: crypto_,
     cache,
     blobCache,
@@ -193,6 +208,9 @@ export function buildPorts(env: Env): EnginePorts {
       fromName: env.FROM_NAME ?? 'Punctual',
       emailDelivery,
       ...(emailProblem ? { emailProblem } : {}),
+      smsDelivery,
+      ...(smsProblem ? { smsProblem } : {}),
+      ...(sms ? { smsPhoneQuestionId: env.SMS_PHONE_QUESTION_ID!.trim(), smsConsentQuestionId: env.SMS_CONSENT_QUESTION_ID!.trim() } : {}),
       telemetryEnabled: env.TELEMETRY_ENABLED === '1',
       blogEnabled: env.BLOG_ENABLED === '1',
     },
