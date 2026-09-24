@@ -15,6 +15,8 @@ export default defineConfig({
   test: {
     projects: [
       {
+        // Match Node's module URL: Windows junctions can otherwise load a second runner.
+        resolve: { alias: [{ find: /^vitest$/, replacement: import.meta.resolve('vitest') }] },
         test: {
           name: 'core',
           include: ['test/core/**/*.test.ts'],

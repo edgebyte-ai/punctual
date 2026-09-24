@@ -1058,7 +1058,10 @@ export function buildApiRoutes(ports: EnginePorts, slots: SlotService): Hono<Api
     })
 
     if (!outcome.ok) return bookingFailure(outcome.reason, outcome.detail)
-    return c.json({ data: bookingJson(outcome.booking) }, 201)
+    return c.json({
+      data: bookingJson(outcome.booking),
+      links: bookingLinks(ports.config.baseUrl, outcome.booking.id, outcome.manageToken),
+    }, 201)
   })
 
   app.post('/bookings/:id/cancel', async (c) => {
@@ -1208,7 +1211,11 @@ export function buildApiRoutes(ports: EnginePorts, slots: SlotService): Hono<Api
       .send({ kind: 'calendar.sync', bookingId: original.id, action: 'delete' })
       .catch(() => {})
 
-    return c.json({ data: bookingJson(outcome.booking), meta: { rescheduledFrom: original.id } }, 201)
+    return c.json({
+      data: bookingJson(outcome.booking),
+      links: bookingLinks(ports.config.baseUrl, outcome.booking.id, outcome.manageToken),
+      meta: { rescheduledFrom: original.id },
+    }, 201)
   })
 
   // -------------------------------------------------------------------------
@@ -1454,6 +1461,14 @@ export function availabilityJson(availability: Availability): Record<string, unk
     weekly: availability.weekly,
     overrides: availability.overrides,
   }
+}
+
+function bookingLinks(baseUrl: string, bookingId: string, token: string | undefined) {
+  // Like confirmation emails, all links open the guest page; only its POST forms mutate.
+  // Idempotent replays have no raw token, so they cannot re-issue these credentials.
+  if (!token) return undefined
+  const manage = `${trimSlash(baseUrl)}/booking/${encodeURIComponent(bookingId)}?token=${encodeURIComponent(token)}`
+  return { manage, cancel: manage, reschedule: manage }
 }
 
 export function bookingJson(booking: Booking): Record<string, unknown> {

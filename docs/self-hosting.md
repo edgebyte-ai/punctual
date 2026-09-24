@@ -255,6 +255,33 @@ and a contact address, and the booking links you pick from your event
 types — one of them featured at the top, the rest grouped under each team
 and person. Docs stay at `/docs`.
 
+## Optional blog
+
+Set `BLOG_ENABLED = "1"` in this instance's `[vars]` and apply migrations
+before deploying. Unset or `"0"` keeps all blog routes off, without reading
+blog data. Other applications can continue using the fork with no blog enabled.
+
+Instance admins manage drafts and published posts at `/dashboard/blog`
+(or the **Manage blog posts** link in Admin), using the existing session and
+CSRF protection. The editor accepts plain text, an excerpt and an optional
+HTTPS cover image URL. Text is escaped when rendered; it is never executed as
+HTML. Cover images remain at their HTTPS source; this module does not upload them.
+
+Public HTML lives at `/blog` and `/blog/:slug`. Custom websites can read
+`GET /api/blog` (`{ posts: [...] }`) and `GET /api/blog/:slug`
+(`{ post: {...} }`). Public fields are `id`, `title`, `slug`, `excerpt`,
+`body` (plain text), `image` (URL or null), and `updatedAt` (ISO timestamp).
+Only published posts are returned; lists contain the latest 100. Responses
+use `Cache-Control: no-store` so unpublishing does not leave a cached article.
+
+For a custom booking frontend, successful authenticated
+`POST /api/v1/bookings` and `POST /api/v1/bookings/:id/reschedule` responses
+include `links: { manage, cancel, reschedule }` alongside the existing `data`.
+All three URLs open Punctual's guest management page, where the customer
+confirms any change. Keep API keys on your website's server, never in the
+browser. Links contain a guest credential: do not log or share them. List/read
+responses and token-less idempotent replays do not expose these links.
+
 ## Upgrading
 
 ```bash

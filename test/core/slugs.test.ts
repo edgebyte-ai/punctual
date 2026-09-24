@@ -9,7 +9,7 @@ describe('validateSlug', () => {
   })
 
   it('refuses reserved words that would shadow system routes', () => {
-    for (const s of ['api', 'login', 'dashboard', 'health', 'mcp', 'booking']) {
+    for (const s of ['api', 'login', 'dashboard', 'health', 'mcp', 'booking', 'blog']) {
       expect(validateSlug(s).reason).toBe('reserved')
     }
   })
@@ -38,7 +38,7 @@ describe('validateSlug', () => {
 
   it('reserves every route the router actually mounts', () => {
     // If a route is added without reserving its segment, a host could claim it.
-    for (const mounted of ['api', 'health', 'mcp', 'embed.js', 'favicon.svg', 'auth', 'booking', 'og']) {
+    for (const mounted of ['api', 'health', 'mcp', 'embed.js', 'favicon.svg', 'auth', 'booking', 'og', 'blog']) {
       expect({ mounted, reserved: RESERVED_SLUGS.has(mounted) }).toEqual({ mounted, reserved: true })
     }
   })

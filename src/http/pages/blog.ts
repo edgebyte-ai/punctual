@@ -9,6 +9,7 @@ function bodyText(value: string): string {
 export function blogListPage(brandName: string, posts: BlogPost[]): string {
   const cards = posts.length
     ? posts.map((p) => `<article class="pu-card" style="margin:1rem 0">
+  ${p.image ? `<img src="${escapeHtml(p.image)}" alt="" loading="lazy" style="max-width:100%;height:auto">` : ''}
   <h2><a href="/blog/${encodeURIComponent(p.slug)}">${escapeHtml(p.title)}</a></h2>
   <p>${bodyText(p.excerpt || p.content.slice(0, 180))}</p>
   <small>${new Date(p.publishedAt ?? p.updatedAt).toLocaleDateString()}</small>
@@ -20,7 +21,7 @@ export function blogListPage(brandName: string, posts: BlogPost[]): string {
 
 export function blogPostPage(brandName: string, post: BlogPost): string {
   return shellHead({ title: `${post.title} · ${brandName}`, brandName, description: post.excerpt, canonical: `/blog/${encodeURIComponent(post.slug)}` }) +
-    `<main><p><a href="/blog">← Blog</a></p><article><h1>${escapeHtml(post.title)}</h1><p><small>${new Date(post.publishedAt ?? post.updatedAt).toLocaleDateString()}</small></p><div>${bodyText(post.content)}</div></article></main>` + shellFoot(false)
+    `<main><p><a href="/blog">← Blog</a></p><article><h1>${escapeHtml(post.title)}</h1><p><small>${new Date(post.publishedAt ?? post.updatedAt).toLocaleDateString()}</small></p>${post.image ? `<img src="${escapeHtml(post.image)}" alt="" style="max-width:100%;height:auto">` : ''}<div>${bodyText(post.content)}</div></article></main>` + shellFoot(false)
 }
 
 export function blogAdminPage(brandName: string, user: User, csrf: string, posts: BlogPost[], edit?: BlogPost): string {
@@ -30,7 +31,8 @@ export function blogAdminPage(brandName: string, user: User, csrf: string, posts
 <label>Title <input name="title" required maxlength="200" value="${escapeHtml(edit?.title ?? '')}"></label>
 <label>Slug <input name="slug" required maxlength="120" pattern="[a-z0-9-]+" value="${escapeHtml(edit?.slug ?? '')}"></label>
 <label>Excerpt <textarea name="excerpt" maxlength="500">${escapeHtml(edit?.excerpt ?? '')}</textarea></label>
-<label>Content <textarea name="content" required rows="14">${escapeHtml(edit?.content ?? '')}</textarea></label>
+<label>Cover image URL (optional, HTTPS) <input name="image" type="url" maxlength="2048" value="${escapeHtml(edit?.image ?? '')}"></label>
+<label>Content (plain text) <textarea name="content" required rows="14" maxlength="100000">${escapeHtml(edit?.content ?? '')}</textarea></label>
 <label><input type="checkbox" name="published" value="1"${edit?.published ? ' checked' : ''}> Published</label>
 <button type="submit">Save</button>${edit ? ' <a href="/dashboard/blog">Cancel</a>' : ''}</form></section>`
   const rows = posts.map((p) => `<tr><td>${escapeHtml(p.title)}</td><td>${p.published ? 'Published' : 'Draft'}</td><td><a href="/dashboard/blog/${encodeURIComponent(p.id)}/edit">Edit</a> <form style="display:inline" method="post" action="/dashboard/blog/${encodeURIComponent(p.id)}/delete"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button type="submit">Delete</button></form></td></tr>`).join('')

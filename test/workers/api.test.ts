@@ -18,6 +18,7 @@ import { createSlotService } from '../../src/engine.js'
 import { buildApiRoutes, toInstant } from '../../src/http/api/rest.js'
 import { buildMcpRoutes } from '../../src/http/mcp/server.js'
 import { buildEmbedRoutes, embedScript } from '../../src/http/embed.js'
+import { buildDashboardRoutes } from '../../src/http/dashboard-routes.js'
 import { createApiKey } from '../../src/core/domain/auth-flows.js'
 import { changeBookingHosts } from '../../src/core/domain/booking-hosts.js'
 import type { EnginePorts } from '../../src/ports.js'
@@ -64,6 +65,7 @@ function buildApp(ports: EnginePorts): Hono {
   app.route('/api/v1', buildApiRoutes(ports, slots))
   app.route('/mcp', buildMcpRoutes(ports, slots))
   app.route('/', buildEmbedRoutes(ports))
+  app.route('/', buildDashboardRoutes(ports, slots))
   return app
 }
 
@@ -158,6 +160,12 @@ interface SlotJson {
   localDate: string
   localTime: string
   eligibleHostIds: string[]
+}
+
+interface BookingResponse {
+  data: { id: string; start: { epochMs: number }; status: string }
+  links: { manage: string; cancel: string; reschedule: string }
+  meta?: { rescheduledFrom: string }
 }
 
 async function firstSlot(app: Hono, key: string, eventTypeId: string): Promise<SlotJson> {
@@ -962,7 +970,7 @@ describe('team event types through the API', () => {
 })
 
 describe('POST /bookings', () => {
-  it('books a slot and lists it back', async () => {
+  it('returns working guest links only on creation and cancels only after a guest POST', async () => {
     const ports = testPorts()
     const app = buildApp(ports)
     const seed = await seedHost(ports)
@@ -981,14 +989,129 @@ describe('POST /bookings', () => {
     })
 
     expect(res.status).toBe(201)
-    const body = (await res.json()) as { data: { id: string; start: { epochMs: number }; status: string } }
+    const body = (await res.json()) as BookingResponse
     expect(body.data.status).toBe('confirmed')
     expect(body.data.start.epochMs).toBe(slot.start.epochMs)
+    expect(Object.keys(body.links).sort()).toEqual(['cancel', 'manage', 'reschedule'])
+    const manage = new URL(body.links.manage)
+    expect(manage.origin).toBe('https://punctual.test')
+    expect(manage.pathname).toBe(`/booking/${body.data.id}`)
+    const token = manage.searchParams.get('token')!
+    expect(token).toBeTruthy()
+    expect(body).not.toHaveProperty('manageToken')
+    expect(body.data).not.toHaveProperty('manageToken')
+    expect(body.data).not.toHaveProperty('manageTokenHash')
+
+    for (const url of Object.values(body.links)) {
+      const page = await app.request(url)
+      expect(page.status).toBe(200)
+      const html = await page.text()
+      expect(html).toContain(`action="/booking/${body.data.id}/cancel"`)
+      expect(html).toContain('Reschedule')
+    }
 
     const { from, to } = nextWeek()
     const list = await app.request(`/api/v1/bookings?from=${from}&to=${to}`, { headers: auth(seed.apiKey) })
     const listBody = (await list.json()) as { data: Array<{ id: string }> }
     expect(listBody.data.map((b) => b.id)).toEqual([body.data.id])
+    const read = await app.request(`/api/v1/bookings/${body.data.id}`, { headers: auth(seed.apiKey) })
+    expect(read.status).toBe(200)
+    const readBody = await read.json() as BookingResponse
+    expect(readBody.data.status).toBe('confirmed')
+    for (const response of [listBody, readBody]) {
+      expect(response).not.toHaveProperty('links')
+      expect(JSON.stringify(response)).not.toMatch(/manageToken|manage_token|"links"/)
+      expect(JSON.stringify(response)).not.toContain(token)
+    }
+
+    const cancelled = await app.request(`/booking/${body.data.id}/cancel`, {
+      method: 'POST',
+      body: new URLSearchParams({ token }),
+    })
+    expect(cancelled.status).toBe(200)
+    expect(await cancelled.text()).toContain('Booking cancelled')
+    const repos = ports.repositories({ consistency: 'bookmark' })
+    expect((await repos.bookings.byId(body.data.id))?.status).toBe('cancelled')
+    expect((await firstSlot(app, seed.apiKey, seed.eventType.id)).start.epochMs).toBe(slot.start.epochMs)
+  })
+
+  it('returns fresh guest links on reschedule while preserving the booking and meta shapes', async () => {
+    const ports = testPorts()
+    const app = buildApp(ports)
+    const seed = await seedHost(ports)
+    const slot = await firstSlot(app, seed.apiKey, seed.eventType.id)
+    const headers = { ...auth(seed.apiKey), 'content-type': 'application/json' }
+    const created = await app.request('/api/v1/bookings', {
+      method: 'POST', headers,
+      body: JSON.stringify({ eventTypeId: seed.eventType.id, start: slot.start.iso, guestName: 'Ada', guestEmail: 'ada@example.com' }),
+    })
+    expect(created.status).toBe(201)
+    const original = await created.json() as BookingResponse
+    const next = await firstSlot(app, seed.apiKey, seed.eventType.id)
+    const moved = await app.request(`/api/v1/bookings/${original.data.id}/reschedule`, {
+      method: 'POST', headers, body: JSON.stringify({ start: next.start.iso }),
+    })
+    expect(moved.status).toBe(201)
+    const replacement = await moved.json() as BookingResponse
+    expect(replacement.data.id).not.toBe(original.data.id)
+    expect(replacement.data.status).toBe('confirmed')
+    expect(replacement.data.start.epochMs).toBe(next.start.epochMs)
+    expect(replacement.meta).toEqual({ rescheduledFrom: original.data.id })
+    expect(Object.keys(replacement.links).sort()).toEqual(['cancel', 'manage', 'reschedule'])
+    expect(replacement.links.manage).not.toBe(original.links.manage)
+    const manage = new URL(replacement.links.manage)
+    expect(manage.pathname).toBe(`/booking/${replacement.data.id}`)
+    expect(manage.searchParams.get('token')).not.toBe(new URL(original.links.manage).searchParams.get('token'))
+    for (const url of Object.values(replacement.links)) {
+      const page = await app.request(url)
+      expect(page.status).toBe(200)
+      expect(await page.text()).toContain(`action="/booking/${replacement.data.id}/cancel"`)
+    }
+    const repos = ports.repositories({ consistency: 'bookmark' })
+    expect((await repos.bookings.byId(original.data.id))?.status).toBe('rescheduled')
+    expect((await repos.bookings.byId(replacement.data.id))?.status).toBe('confirmed')
+
+    const guestSlot = await firstSlot(app, seed.apiKey, seed.eventType.id)
+    const guestMoved = await app.request(`/booking/${replacement.data.id}/reschedule`, {
+      method: 'POST',
+      body: new URLSearchParams({ token: manage.searchParams.get('token')!, start: String(guestSlot.start.epochMs) }),
+    })
+    expect(guestMoved.status).toBe(302)
+    expect((await repos.bookings.byId(replacement.data.id))?.status).toBe('rescheduled')
+    expect((await app.request(guestMoved.headers.get('location')!)).status).toBe(200)
+  })
+
+  it('refuses unauthenticated, read-only and unrelated callers before returning guest links', async () => {
+    const ports = testPorts()
+    const app = buildApp(ports)
+    const seed = await seedHost(ports)
+    const outsider = await seedHost(ports)
+    const repos = ports.repositories({ consistency: 'bookmark' })
+    const readonly = await createApiKey({ repos, crypto: ports.crypto }, {
+      userId: seed.user.id, name: 'read only', scopes: ['read'], now: Date.now(),
+    })
+    const slot = await firstSlot(app, seed.apiKey, seed.eventType.id)
+    const payload = JSON.stringify({ eventTypeId: seed.eventType.id, start: slot.start.iso, guestName: 'Ada', guestEmail: 'ada@example.com' })
+    for (const [key, status] of [[undefined, 401], [readonly.raw, 403], [outsider.apiKey, 404]] as const) {
+      const denied = await app.request('/api/v1/bookings', {
+        method: 'POST', headers: { 'content-type': 'application/json', ...(key ? auth(key) : {}) }, body: payload,
+      })
+      expect(denied.status).toBe(status)
+      expect(await denied.text()).not.toContain('"links"')
+    }
+    const created = await app.request('/api/v1/bookings', {
+      method: 'POST', headers: { ...auth(seed.apiKey), 'content-type': 'application/json' }, body: payload,
+    })
+    expect(created.status).toBe(201)
+    const body = await created.json() as BookingResponse
+    for (const [key, status] of [[undefined, 401], [readonly.raw, 403], [outsider.apiKey, 404]] as const) {
+      const denied = await app.request(`/api/v1/bookings/${body.data.id}/reschedule`, {
+        method: 'POST', headers: { 'content-type': 'application/json', ...(key ? auth(key) : {}) }, body: JSON.stringify({ start: slot.start.iso }),
+      })
+      expect(denied.status).toBe(status)
+      expect(await denied.text()).not.toContain('"links"')
+    }
+    expect((await repos.bookings.byId(body.data.id))?.status).toBe('confirmed')
   })
 
   /**
@@ -1079,7 +1202,8 @@ describe('POST /bookings', () => {
 
     const first = await app.request('/api/v1/bookings', { method: 'POST', headers, body: payload })
     expect(first.status).toBe(201)
-    const firstBody = (await first.json()) as { data: { id: string } }
+    const firstBody = (await first.json()) as BookingResponse
+    expect(firstBody.links.manage).toContain(`/booking/${firstBody.data.id}?token=`)
 
     // The retry a flaky network produces: same key, same body. It must return
     // the original booking rather than a second meeting at the same time
@@ -1089,6 +1213,8 @@ describe('POST /bookings', () => {
     expect(second.status).toBe(201)
     const secondBody = (await second.json()) as { data: { id: string } }
     expect(secondBody.data.id).toBe(firstBody.data.id)
+    expect(secondBody).not.toHaveProperty('links')
+    expect(JSON.stringify(secondBody)).not.toMatch(/manageToken|manage_token/)
 
     const { from, to } = nextWeek()
     const list = await app.request(`/api/v1/bookings?from=${from}&to=${to}`, { headers: auth(seed.apiKey) })

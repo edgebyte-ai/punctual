@@ -1541,7 +1541,8 @@ export function createD1Repositories(db: D1Database, scope: RequestScope): Repos
   const blog: BlogRepository = {
     async list(publishedOnly = false) {
       const where = publishedOnly ? ' WHERE published = 1' : ''
-      const rows = await all<Record<string, unknown>>(`SELECT * FROM blog_posts${where} ORDER BY published_at DESC, updated_at DESC`)
+      // ponytail: show the latest 100 publicly; add pagination when the archive needs more.
+      const rows = await all<Record<string, unknown>>(`SELECT * FROM blog_posts${where} ORDER BY published_at DESC, updated_at DESC${publishedOnly ? ' LIMIT 100' : ''}`)
       return rows.map(mapBlogPost)
     },
     async bySlug(slug, publishedOnly = false) {
@@ -1556,21 +1557,33 @@ export function createD1Repositories(db: D1Database, scope: RequestScope): Repos
       return row ? mapBlogPost(row) : null
     },
     async create(post) {
-      await run(
-        `INSERT INTO blog_posts (id, slug, title, excerpt, content, published, created_at, updated_at, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        , post.id, post.slug, post.title, post.excerpt, post.content, post.published ? 1 : 0,
-        post.createdAt, post.updatedAt, post.published ? post.updatedAt : null,
-      )
+      try {
+        await run(
+          `INSERT INTO blog_posts (id, slug, title, excerpt, content, image, published, created_at, updated_at, published_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          post.id, post.slug, post.title, post.excerpt, post.content, post.image, post.published ? 1 : 0,
+          post.createdAt, post.updatedAt, post.publishedAt,
+        )
+        return true
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('UNIQUE constraint failed: blog_posts.slug')) return false
+        throw err
+      }
     },
     async update(id, patch, now) {
-      await run(
-        `UPDATE blog_posts SET slug = ?, title = ?, excerpt = ?, content = ?, published = ?,
-           updated_at = ?, published_at = CASE WHEN ? = 1 AND published_at IS NULL THEN ? ELSE published_at END
-         WHERE id = ?`,
-        patch.slug, patch.title, patch.excerpt, patch.content, patch.published ? 1 : 0,
-        now, patch.published ? 1 : 0, now, id,
-      )
+      try {
+        await run(
+          `UPDATE blog_posts SET slug = ?, title = ?, excerpt = ?, content = ?, image = ?, published = ?,
+             updated_at = ?, published_at = CASE WHEN ? = 1 AND published_at IS NULL THEN ? ELSE published_at END
+           WHERE id = ?`,
+          patch.slug, patch.title, patch.excerpt, patch.content, patch.image, patch.published ? 1 : 0,
+          now, patch.published ? 1 : 0, now, id,
+        )
+        return true
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('UNIQUE constraint failed: blog_posts.slug')) return false
+        throw err
+      }
     },
     async delete(id) {
       await run('DELETE FROM blog_posts WHERE id = ?', id)
@@ -1608,6 +1621,7 @@ function mapBlogPost(row: Record<string, unknown>): BlogPost {
     title: String(row.title),
     excerpt: String(row.excerpt ?? ''),
     content: String(row.content ?? ''),
+    image: row.image == null ? null : String(row.image),
     published: Number(row.published) === 1,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),

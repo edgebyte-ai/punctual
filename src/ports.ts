@@ -79,6 +79,7 @@ export interface BlogPost {
   title: string
   excerpt: string
   content: string
+  image: string | null
   published: boolean
   createdAt: number
   updatedAt: number
@@ -89,8 +90,9 @@ export interface BlogRepository {
   list(publishedOnly?: boolean): Promise<BlogPost[]>
   bySlug(slug: string, publishedOnly?: boolean): Promise<BlogPost | null>
   byId(id: string): Promise<BlogPost | null>
-  create(post: BlogPost): Promise<void>
-  update(id: string, patch: Pick<BlogPost, 'slug' | 'title' | 'excerpt' | 'content' | 'published'>, now: number): Promise<void>
+  /** False only when another post already owns the slug. */
+  create(post: BlogPost): Promise<boolean>
+  update(id: string, patch: Pick<BlogPost, 'slug' | 'title' | 'excerpt' | 'content' | 'image' | 'published'>, now: number): Promise<boolean>
   delete(id: string): Promise<void>
 }
 

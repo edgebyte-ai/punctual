@@ -19,11 +19,11 @@
 export const RESERVED_SLUGS = new Set([
   // Live routes
   'api', 'health', 'mcp', 'embed', 'embed.js', 'favicon.svg', 'robots.txt',
-  'auth', 'login', 'logout', 'dashboard', 'booking', 'bookings', 'og', 'avatars',
+  'auth', 'login', 'logout', 'dashboard', 'booking', 'bookings', 'og', 'avatars', 'blog',
   // Near-misses and likely future routes
   'admin', 'settings', 'account', 'billing', 'pricing', 'signup', 'signin',
   'register', 'app', 'www', 'static', 'assets', 'public', 'docs', 'help',
-  'support', 'status', 'blog', 'about', 'terms', 'privacy', 'legal',
+  'support', 'status', 'about', 'terms', 'privacy', 'legal',
   // Infrastructure hostnames under punctual.sh (ADR-0008).
   'mail', 'smtp', 'mx', 'ns', 'cdn',
   'security', 'webhooks', 'oauth', 'callback', 'verify', 'reset',

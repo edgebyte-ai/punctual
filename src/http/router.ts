@@ -11,7 +11,7 @@
  * (ADR-0007 §2.)
  */
 
-import { Hono, type Context } from 'hono'
+import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { streamPage } from './streaming.js'
 import { buildApiRoutes } from './api/rest.js'
 import { buildMcpRoutes } from './mcp/server.js'
@@ -26,7 +26,7 @@ import { instanceHomePage } from './pages/home.js'
 import { HOME_KEYS, homeFeatured, homeGroups, homeItems, parseHomeSettings, withTeamPeople } from '../core/domain/home.js'
 import { COMPANY_LOGO_KEY, COMPANY_LOGO_SHAPE, companyLogoFrom } from '../core/domain/media.js'
 import { docsApiPage, docsIndexPage, docsMcpPage, docsSelfHostingPage } from './pages/docs.js'
-import type { EnginePorts, RequestScope } from '../ports.js'
+import type { BlogPost, EnginePorts, RequestScope } from '../ports.js'
 import type { SlotService } from '../engine.js'
 import { daysWithSlots, monthRange } from '../engine.js'
 import type { User } from '../core/domain/types.js'
@@ -170,17 +170,37 @@ export function buildRouter(ports: EnginePorts, slots: SlotService): Hono<{ Bind
     ),
   )
 
-  if (ports.config.blogEnabled) {
-    app.get('/blog', async (c) => {
-      const posts = await ports.repositories(publicScope).blog.list(true)
-      return c.html(blogListPage(ports.config.brandName, posts))
-    })
-    app.get('/blog/:slug', async (c) => {
-      const post = await ports.repositories(publicScope).blog.bySlug(c.req.param('slug'), true)
-      if (!post) return notFound(c, ports)
-      return c.html(blogPostPage(ports.config.brandName, post))
-    })
+  // Keep these namespaces reserved even when disabled: otherwise the generic
+  // booking-page route would query users/event types for /blog/:slug.
+  const requireBlog: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+    if (!ports.config.blogEnabled) return c.notFound()
+    c.header('cache-control', 'no-store')
+    await next()
   }
+  for (const route of ['/blog', '/blog/*', '/api/blog', '/api/blog/*']) app.use(route, requireBlog)
+
+  // Publish/unpublish must read the latest edit, unlike advisory slot listings.
+  const publicPost = (post: BlogPost) => ({
+    id: post.id, title: post.title, slug: post.slug, excerpt: post.excerpt,
+    body: post.content, image: post.image, updatedAt: new Date(post.updatedAt).toISOString(),
+  })
+  app.get('/api/blog', async (c) => {
+    const posts = await ports.repositories({ consistency: 'bookmark' }).blog.list(true)
+    return c.json({ posts: posts.map(publicPost) })
+  })
+  app.get('/api/blog/:slug', async (c) => {
+    const post = await ports.repositories({ consistency: 'bookmark' }).blog.bySlug(c.req.param('slug'), true)
+    return post ? c.json({ post: publicPost(post) }) : c.json({ error: 'Not found' }, 404)
+  })
+  app.get('/blog', async (c) => {
+    const posts = await ports.repositories({ consistency: 'bookmark' }).blog.list(true)
+    return c.html(blogListPage(ports.config.brandName, posts))
+  })
+  app.get('/blog/:slug', async (c) => {
+    const post = await ports.repositories({ consistency: 'bookmark' }).blog.bySlug(c.req.param('slug'), true)
+    if (!post) return notFound(c, ports)
+    return c.html(blogPostPage(ports.config.brandName, post))
+  })
 
   // Programmatic surfaces. Mounted before the /:userSlug/:eventSlug catch-all
   // so a host cannot claim the slug "api" and shadow them.

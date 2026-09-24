@@ -30,6 +30,7 @@
  */
 
 import { Hono, type Context, type MiddlewareHandler } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { notifyBookingCancelled, notifyWebhooks } from '../adapters/notify.js'
 import { dispatchConfirmation } from '../adapters/queue/consumer.js'
 import type {
@@ -2366,63 +2367,72 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
   // Optional blog — instance admins only
   // ===========================================================================
 
-  const blogUnavailable = (c: Ctx) => c.html(errorPage('Not found', 'The blog is not enabled on this instance.'), 404)
-  const blogPage = async (c: Ctx, edit?: Awaited<ReturnType<Repositories['blog']['byId']>>) => {
-    if (!ports.config.blogEnabled) return blogUnavailable(c)
-    return c.html(blogAdminPage(brandName, c.get('user'), c.get('csrf'), await c.get('repos').blog.list(), edit ?? undefined))
+  const requireBlog: MiddlewareHandler<{ Bindings: Env; Variables: Vars }> = async (c, next) => {
+    if (!ports.config.blogEnabled) return c.notFound()
+    c.header('cache-control', 'no-store')
+    await next()
   }
+  // The switch precedes session and repository resolution, including edit URLs.
+  for (const route of ['/dashboard/blog', '/dashboard/blog/*']) {
+    app.use(route, requireBlog, requireSession, requireAdmin, bodyLimit({ maxSize: 512_000 }))
+  }
+  const blogPage = async (c: Ctx, edit?: Awaited<ReturnType<Repositories['blog']['byId']>>) =>
+    c.html(blogAdminPage(brandName, c.get('user'), c.get('csrf'), await c.get('repos').blog.list(), edit ?? undefined))
 
-  app.get('/dashboard/blog', requireSession, requireAdmin, (c) => blogPage(c))
-  app.get('/dashboard/blog/new', requireSession, requireAdmin, (c) => blogPage(c))
-  app.get('/dashboard/blog/:id/edit', requireSession, requireAdmin, async (c) => {
+  app.get('/dashboard/blog', (c) => blogPage(c))
+  app.get('/dashboard/blog/new', (c) => blogPage(c))
+  app.get('/dashboard/blog/:id/edit', async (c) => {
     const post = await c.get('repos').blog.byId(c.req.param('id'))
-    if (!post) return c.redirect('/dashboard/blog', 302)
-    return blogPage(c, post)
+    return post ? blogPage(c, post) : c.notFound()
   })
 
-  async function parseBlogForm(c: Ctx): Promise<{ slug: string; title: string; excerpt: string; content: string; published: boolean } | null> {
-    const form = await c.req.formData()
-    if (!(await csrfOk(c, form))) return null
+  function parseBlogForm(form: FormData) {
     const slug = String(form.get('slug') ?? '').trim().toLowerCase()
     const title = String(form.get('title') ?? '').trim()
     const excerpt = String(form.get('excerpt') ?? '').replace(/\r\n?/g, '\n').trim()
     const content = String(form.get('content') ?? '').replace(/\r\n?/g, '\n').trim()
+    const image = String(form.get('image') ?? '').trim() || null
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 120 || title.length < 1 || title.length > 200 || excerpt.length > 500 || content.length < 1 || content.length > 100_000) return null
-    return { slug, title, excerpt, content, published: form.get('published') === '1' }
+    if (image) {
+      try {
+        const url = new URL(image)
+        if (image.length > 2048 || url.protocol !== 'https:' || url.username || url.password) return null
+      } catch { return null }
+    }
+    return { slug, title, excerpt, content, image, published: form.get('published') === '1' }
   }
 
-  app.post('/dashboard/blog', requireSession, requireAdmin, async (c) => {
-    if (!ports.config.blogEnabled) return blogUnavailable(c)
-    const parsed = await parseBlogForm(c)
-    if (!parsed) return c.html(errorPage('Invalid post', 'Check the title, slug and content, then try again.'), 400)
-    const now = ports.clock.now()
-    try {
-      await c.get('repos').blog.create({ id: ports.crypto.randomToken(18), ...parsed, createdAt: now, updatedAt: now, publishedAt: parsed.published ? now : null })
-    } catch {
-      return c.html(errorPage('Could not save post', 'That slug is already in use.'), 409)
-    }
-    await advanceBookmark(c)
-    return c.redirect('/dashboard/blog', 303)
-  })
-
-  app.post('/dashboard/blog/:id', requireSession, requireAdmin, async (c) => {
-    if (!ports.config.blogEnabled) return blogUnavailable(c)
-    const parsed = await parseBlogForm(c)
-    if (!parsed) return c.html(errorPage('Invalid post', 'Check the title, slug and content, then try again.'), 400)
-    try {
-      await c.get('repos').blog.update(c.req.param('id'), parsed, ports.clock.now())
-    } catch {
-      return c.html(errorPage('Could not save post', 'That slug is already in use.'), 409)
-    }
-    await advanceBookmark(c)
-    return c.redirect('/dashboard/blog', 303)
-  })
-
-  app.post('/dashboard/blog/:id/delete', requireSession, requireAdmin, async (c) => {
-    if (!ports.config.blogEnabled) return blogUnavailable(c)
+  app.post('/dashboard/blog', async (c) => {
     const form = await c.req.formData()
     if (!(await csrfOk(c, form))) return csrfRejected(c)
-    await c.get('repos').blog.delete(c.req.param('id'))
+    const parsed = parseBlogForm(form)
+    if (!parsed) return c.html(errorPage('Invalid post', 'Check the title, slug, content and HTTPS cover image URL, then try again.'), 400)
+    const now = ports.clock.now()
+    const saved = await c.get('repos').blog.create({ id: ports.crypto.randomToken(18), ...parsed, createdAt: now, updatedAt: now, publishedAt: parsed.published ? now : null })
+    if (!saved) return c.html(errorPage('Could not save post', 'That slug is already in use.'), 409)
+    await advanceBookmark(c)
+    return c.redirect('/dashboard/blog', 303)
+  })
+
+  app.post('/dashboard/blog/:id', async (c) => {
+    const form = await c.req.formData()
+    if (!(await csrfOk(c, form))) return csrfRejected(c)
+    const parsed = parseBlogForm(form)
+    if (!parsed) return c.html(errorPage('Invalid post', 'Check the title, slug, content and HTTPS cover image URL, then try again.'), 400)
+    const repos = c.get('repos')
+    if (!(await repos.blog.byId(c.req.param('id')))) return c.notFound()
+    const saved = await repos.blog.update(c.req.param('id'), parsed, ports.clock.now())
+    if (!saved) return c.html(errorPage('Could not save post', 'That slug is already in use.'), 409)
+    await advanceBookmark(c)
+    return c.redirect('/dashboard/blog', 303)
+  })
+
+  app.post('/dashboard/blog/:id/delete', async (c) => {
+    const form = await c.req.formData()
+    if (!(await csrfOk(c, form))) return csrfRejected(c)
+    const repos = c.get('repos')
+    if (!(await repos.blog.byId(c.req.param('id')))) return c.notFound()
+    await repos.blog.delete(c.req.param('id'))
     await advanceBookmark(c)
     return c.redirect('/dashboard/blog', 303)
   })
