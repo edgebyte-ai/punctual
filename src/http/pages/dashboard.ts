@@ -2557,6 +2557,18 @@ export interface BookingsPageData extends DashboardChrome {
   truncated: boolean
 }
 
+export function newBookingPage(d: DashboardChrome & { eventTypes: EventTypeListItem[] }): string {
+  const choices = d.eventTypes.map(({ eventType, ownerSlug, teamName }) =>
+    `<li class="pu-booking-row"><a class="pu-booking-link" href="/${escapeHtml(encodeURIComponent(ownerSlug))}/${escapeHtml(encodeURIComponent(eventType.slug))}"><strong>${escapeHtml(eventType.title)}</strong><span class="pu-muted">${escapeHtml(teamName ?? ownerSlug)} · ${eventType.durationMinutes} min</span></a></li>`,
+  ).join('\n')
+  return shellTop(d, 'Add booking', 'bookings') +
+    `<p><a href="/dashboard/bookings">&larr; Bookings</a></p>
+<h1>Add booking</h1>
+<p class="pu-muted">Choose an event type, then pick an available time and enter the customer's name and email. The customer receives the confirmation and a link to manage the booking.</p>
+${choices ? `<ul class="pu-bookings" aria-label="Event types">${choices}</ul>` : '<p class="pu-muted">No active event types available. <a href="/dashboard">Manage event types</a> to make one available.</p>'}` +
+    shellBottom(d.brandName)
+}
+
 const BOOKING_VIEWS: ReadonlyArray<{ key: BookingListView; label: string; empty: string }> = [
   { key: 'upcoming', label: 'Upcoming', empty: 'Nothing booked yet. New bookings appear here as guests pick times.' },
   { key: 'past', label: 'Past', empty: 'No meetings have happened yet.' },
@@ -2588,7 +2600,10 @@ export function bookingsPage(d: BookingsPageData): string {
 
   return (
     shellTop(d, 'Bookings', 'bookings') +
-    `<h1>Bookings</h1>
+    `<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem">
+  <h1 style="margin:0">Bookings</h1>
+  <a class="pu-btn" href="/dashboard/bookings/new">Add booking</a>
+</div>
 <p class="pu-muted" style="font-size:.8125rem;margin-top:-.5rem">Times in ${escapeHtml(d.user.tz)} (${escapeHtml(offsetLabel(Date.now(), d.user.tz))})</p>
 <nav class="pu-tabs" aria-label="Bookings">
     ${tabs}
@@ -2877,7 +2892,7 @@ function actionsSection(d: HostBookingPageData, path: string, confirmed: boolean
       ${csrfField(d.csrf)}
       <label for="note">Note to the guest <span class="pu-muted">(optional)</span></label>
       <textarea id="note" name="note" rows="3" maxlength="500" placeholder="Something came up — sorry for the short notice."></textarea>
-      <p class="pu-help">Sent to ${escapeHtml(d.booking.guestName)} with the cancellation. The time is released.</p>
+      <p class="pu-help">Sent to ${escapeHtml(d.booking.guestName)} with the cancellation. The time is released, and the record stays in Cancelled.</p>
       <button class="pu-btn pu-btn-ghost pu-btn-ghost-danger" type="submit">Cancel booking</button>
     </form>
   </section>`

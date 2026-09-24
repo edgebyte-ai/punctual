@@ -10,6 +10,7 @@ import type { Booking, EventType, User } from '../../src/core/domain/types.js'
 import type { HostChangeFailure } from '../../src/core/domain/booking-hosts.js'
 import {
   bookingsPage,
+  newBookingPage,
   hostBookingPage,
   hostChangeFailureMessage,
   hostReschedulePage,
@@ -114,6 +115,7 @@ describe('bookings list', () => {
     const upcoming = bookingsPage({ ...chrome, view: 'upcoming', rows: [], truncated: false })
     expect(upcoming).toContain('href="/dashboard/bookings?view=upcoming" aria-current="page"')
     expect(upcoming).toContain('Nothing booked yet')
+    expect(upcoming).toContain('href="/dashboard/bookings/new">Add booking</a>')
     expect(upcoming).toContain('<a class="pu-nav-link" href="/dashboard/bookings" aria-current="page">Bookings</a>')
 
     const past = bookingsPage({ ...chrome, view: 'past', rows: [], truncated: false })
@@ -137,6 +139,22 @@ describe('bookings list', () => {
     expect(html).toContain('with Bob Host and Dana Host')
     expect(html).toContain('pu-badge pu-badge-dot">Confirmed</span>')
     expect(html).toContain('Showing the first 1.')
+  })
+})
+
+describe('add booking page', () => {
+  it('links to the existing booking form with escaped labels and an actionable empty state', () => {
+    const html = newBookingPage({ ...chrome, eventTypes: [
+      { eventType: eventType({ title: 'Support <call>', slug: 'support/call' }), ownerSlug: 'crew', teamName: 'A & B' },
+    ] })
+    expect(html).toContain('href="/crew/support%2Fcall"')
+    expect(html).toContain('Support &lt;call&gt;')
+    expect(html).toContain('A &amp; B · 30 min')
+    expect(html).toContain("customer's name and email")
+    expect(html).not.toContain('Support <call>')
+    const empty = newBookingPage({ ...chrome, eventTypes: [] })
+    expect(empty).toContain('No active event types available.')
+    expect(empty).toContain('href="/dashboard">Manage event types</a>')
   })
 })
 
@@ -166,6 +184,7 @@ describe('booking page', () => {
     expect(html).toContain('Optional')
     expect(html).toContain('Required')
     expect(html).toContain('Not on this one')
+    expect(html).toContain('The time is released, and the record stays in Cancelled.')
     expect(html).toContain('action="/dashboard/bookings/bk_1/hosts/add"')
     expect(html).toContain('<option value="u_carol">Carol Admin</option>')
     expect(html).toContain('action="/dashboard/bookings/bk_1/hosts/u_bob/remove"')

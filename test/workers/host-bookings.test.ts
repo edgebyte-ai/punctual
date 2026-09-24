@@ -51,6 +51,7 @@ const ALICE_ID = 'usr_hb_alice'
 const BOB_ID = 'usr_hb_bob'
 const CAROL_ID = 'usr_hb_carol'
 const OUTSIDER_ID = 'usr_hb_outsider'
+const ADMIN_ID = 'usr_hb_admin'
 const TEAM_ID = 'team_hb'
 const ET_PERSONAL = 'et_hb_personal'
 const ET_TEAM = 'et_hb_team'
@@ -266,6 +267,8 @@ beforeAll(async () => {
   await db.prepare(insert).bind(BOB_ID, 'bob-hb@example.test', 'Bob Host', 'UTC', 'bob-hb', NOW).run()
   await db.prepare(insert).bind(CAROL_ID, 'carol-hb@example.test', 'Carol Admin', 'UTC', 'carol-hb', NOW).run()
   await db.prepare(insert).bind(OUTSIDER_ID, 'outsider-hb@example.test', 'Outsider', 'UTC', 'outsider-hb', NOW).run()
+  await db.prepare(insert).bind(ADMIN_ID, 'admin-hb@example.test', 'Instance Admin', 'UTC', 'admin-hb', NOW).run()
+  await db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").bind(ADMIN_ID).run()
 
   await db.prepare('INSERT INTO teams (id,name,slug,created_at) VALUES (?,?,?,?)').bind(TEAM_ID, 'Support Crew', 'support-hb', NOW).run()
   const member = 'INSERT INTO team_members (team_id,user_id,role,rr_weight) VALUES (?,?,?,?)'
@@ -287,6 +290,11 @@ beforeAll(async () => {
     .prepare(eventType)
     .bind(ET_TEAM, null, TEAM_ID, 'collective', 'support-call', 'Support call', '', 30, null, 0, 0, 0, 60, null,
       'custom_link', 'https://meet.example.test/support', JSON.stringify([{ id: 'q1', label: 'Budget', type: 'text', required: false }]), 1, NOW)
+    .run()
+  await db
+    .prepare(eventType)
+    .bind('et_hb_inactive', ALICE_ID, null, 'personal', 'inactive', 'Inactive call', '', 30, null, 0, 0, 0, 60, null,
+      'google_meet', null, '[]', 0, NOW)
     .run()
 
   await seedBooking({ id: B_UP, eventTypeId: ET_PERSONAL, hosts: [ALICE_ID], start: NOW + 2 * DAY })
@@ -310,6 +318,37 @@ beforeEach(() => {
 })
 
 // ---------------------------------------------------------------------------
+
+describe('add booking', () => {
+  it('requires a session and lists only a member\'s personal and team event links', async () => {
+    const anonymous = await get('/dashboard/bookings/new')
+    expect(anonymous.status).toBe(302)
+    expect(anonymous.headers.get('location')).toBe('/login')
+    const alice = await get('/dashboard/bookings/new', await seedSession(ALICE_ID))
+    expect(alice.status).toBe(200)
+    const aliceHtml = await alice.text()
+    expect(aliceHtml).toContain('href="/alice-hb/intro"')
+    expect(aliceHtml).toContain('href="/support-hb/support-call"')
+    expect(aliceHtml).not.toContain('/alice-hb/inactive')
+    const bob = await (await get('/dashboard/bookings/new', await seedSession(BOB_ID))).text()
+    expect(bob).toContain('href="/support-hb/support-call"')
+    expect(bob).not.toContain('/alice-hb/intro')
+    const outsider = await (await get('/dashboard/bookings/new', await seedSession(OUTSIDER_ID))).text()
+    expect(outsider).toContain('No active event types available.')
+    expect(outsider).not.toContain('/alice-hb/intro')
+    expect(outsider).not.toContain('/support-hb/support-call')
+  })
+
+  it('lets an instance admin choose all active event links without exposing private bookings', async () => {
+    const cookie = await seedSession(ADMIN_ID)
+    const html = await (await get('/dashboard/bookings/new', cookie)).text()
+    expect(html).toContain('href="/alice-hb/intro"')
+    expect(html).toContain('href="/support-hb/support-call"')
+    expect(html).not.toContain('/alice-hb/inactive')
+    expect(html).not.toContain('grace@example.test')
+    expect((await get(`/dashboard/bookings/${B_UP}`, cookie)).status).toBe(404)
+  })
+})
 
 describe('bookings list', () => {
   it('shows the upcoming view by default: confirmed, not yet over, co-hosts named', async () => {

@@ -103,6 +103,7 @@ import {
   scheduleForm,
   bookingDetailPage,
   bookingsPage,
+  newBookingPage,
   connectionsPage,
   dashboardHome,
   hostBookingPage,
@@ -2595,6 +2596,20 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
   const BOOKINGS_LIST_LIMIT = 100
   /** How far ahead the host's reschedule picker looks. */
   const RESCHEDULE_HORIZON_MS = 14 * 24 * 60 * 60 * 1000
+
+  app.get('/dashboard/bookings/new', requireSession, async (c) => {
+    const repos = c.get('repos')
+    const user = c.get('user')
+    const teamIds = new Set((await repos.teams.memberships(user.id)).map((m) => m.teamId))
+    const eventTypes = (await repos.eventTypes.listActiveWithOwners())
+      .filter(({ owner }) => user.role === 'admin' || (owner.kind === 'user' ? owner.id === user.id : teamIds.has(owner.id)))
+      .map(({ eventType, owner }) => ({ eventType, ownerSlug: owner.slug, ...(owner.kind === 'team' ? { teamName: owner.name } : {}) }))
+    return c.html(newBookingPage({
+      brandName, user, csrf: c.get('csrf'), emailDelivery,
+      ...(emailProblem ? { emailProblem } : {}),
+      eventTypes,
+    }))
+  })
 
   app.get('/dashboard/bookings', requireSession, async (c) => {
     const repos = c.get('repos')
