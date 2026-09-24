@@ -58,6 +58,24 @@ describe('optional blog under real D1 and Workers', () => {
     expect(await repos.blog.list()).toEqual([])
   })
 
+  it('shows Blog navigation on dashboard pages only for an enabled instance admin', async () => {
+    const { ports, app } = harness()
+    const admin = await login(ports)
+    const member = await login(ports, 'member')
+    const disabled = buildRouter({ ...ports, config: { ...ports.config, blogEnabled: false } }, { async forEventType() { return [] } })
+    for (const path of ['/dashboard', '/dashboard/bookings', '/dashboard/bookings/new', '/dashboard/availability',
+      '/dashboard/teams', '/dashboard/connections', '/dashboard/api-keys', '/dashboard/settings']) {
+      for (const [router, cookie, visible] of [[app, admin.cookie, true], [app, member.cookie, false], [disabled, admin.cookie, false]] as const) {
+        const response = await router.request(path, { headers: { cookie } })
+        expect(response.status, path).toBe(200)
+        const html = await response.text()
+        expect(html.includes('class="pu-nav-link" href="/dashboard/blog"'), path).toBe(visible)
+      }
+    }
+    const blog = await app.request('/dashboard/blog', { headers: { cookie: admin.cookie } })
+    expect(await blog.text()).toContain('href="/dashboard/blog" aria-current="page"')
+  })
+
   it('creates drafts, publishes/edits, unpublishes and deletes through the authenticated forms', async () => {
     const { ports, app, repos } = harness()
     const admin = await login(ports)

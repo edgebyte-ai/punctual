@@ -1,0 +1,4 @@
+# Filled-in production configuration is local operator state.
+wrangler.production.jsonc
+.dev.vars
+.wrangler/

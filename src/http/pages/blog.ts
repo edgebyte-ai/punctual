@@ -1,5 +1,5 @@
 import type { BlogPost } from '../../ports.js'
-import type { User } from '../../core/domain/types.js'
+import { shellTop, shellBottom, type DashboardChrome } from './dashboard.js'
 import { escapeHtml, shellFoot, shellHead } from './booking.js'
 
 function bodyText(value: string): string {
@@ -24,7 +24,8 @@ export function blogPostPage(brandName: string, post: BlogPost): string {
     `<main><p><a href="/blog">← Blog</a></p><article><h1>${escapeHtml(post.title)}</h1><p><small>${new Date(post.publishedAt ?? post.updatedAt).toLocaleDateString()}</small></p>${post.image ? `<img src="${escapeHtml(post.image)}" alt="" style="max-width:100%;height:auto">` : ''}<div>${bodyText(post.content)}</div></article></main>` + shellFoot(false)
 }
 
-export function blogAdminPage(brandName: string, user: User, csrf: string, posts: BlogPost[], edit?: BlogPost): string {
+export function blogAdminPage(chrome: DashboardChrome, posts: BlogPost[], edit?: BlogPost): string {
+  const { brandName, user, csrf } = chrome
   const form = `<section class="pu-card"><h2>${edit ? 'Edit post' : 'New post'}</h2>
 <form method="post" action="${edit ? `/dashboard/blog/${encodeURIComponent(edit.id)}` : '/dashboard/blog'}">
 <input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
@@ -36,6 +37,6 @@ export function blogAdminPage(brandName: string, user: User, csrf: string, posts
 <label><input type="checkbox" name="published" value="1"${edit?.published ? ' checked' : ''}> Published</label>
 <button type="submit">Save</button>${edit ? ' <a href="/dashboard/blog">Cancel</a>' : ''}</form></section>`
   const rows = posts.map((p) => `<tr><td>${escapeHtml(p.title)}</td><td>${p.published ? 'Published' : 'Draft'}</td><td><a href="/dashboard/blog/${encodeURIComponent(p.id)}/edit">Edit</a> <form style="display:inline" method="post" action="/dashboard/blog/${encodeURIComponent(p.id)}/delete"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button type="submit">Delete</button></form></td></tr>`).join('')
-  return shellHead({ title: `Blog admin · ${brandName}`, brandName }) +
-    `<main><p>Signed in as ${escapeHtml(user.email)} · <a href="/dashboard">Dashboard</a></p><h1>Blog</h1>${form}<section class="pu-card"><h2>Posts</h2><table><tr><th>Title</th><th>Status</th><th>Actions</th></tr>${rows || '<tr><td colspan="3">No posts yet.</td></tr>'}</table></section></main>` + shellFoot(false)
+  return shellTop(chrome, 'Blog', 'blog') +
+    `<main><p>Signed in as ${escapeHtml(user.email)} · <a href="/dashboard">Dashboard</a></p><h1>Blog</h1>${form}<section class="pu-card"><h2>Posts</h2><table><tr><th>Title</th><th>Status</th><th>Actions</th></tr>${rows || '<tr><td colspan="3">No posts yet.</td></tr>'}</table></section></main>` + shellBottom(brandName)
 }

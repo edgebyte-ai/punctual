@@ -1,0 +1,34 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "sunnyvale-punctual",
+  "main": "../../src/index.ts",
+  "compatibility_date": "2026-08-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "../../assets" },
+  "dev": { "ip": "127.0.0.1", "port": 8787, "local_protocol": "http" },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "sunnyvale-punctual",
+    "database_id": "00000000-0000-0000-0000-000000000001",
+    "migrations_dir": "../../migrations"
+  }],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "00000000000000000000000000000001" }],
+  "r2_buckets": [{ "binding": "AVATARS", "bucket_name": "sunnyvale-punctual-avatars" }],
+  "durable_objects": { "bindings": [
+    { "name": "HOST_CALENDAR", "class_name": "HostCalendar" },
+    { "name": "RATE_LIMITER", "class_name": "RateLimiter" }
+  ] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HostCalendar", "RateLimiter"] }],
+  "vars": {
+    "BASE_URL": "http://127.0.0.1:8787",
+    "BRAND_NAME": "Sunnyvale Discount Smog",
+    "FROM_NAME": "Sunnyvale Discount Smog",
+    "FROM_EMAIL": "appointments@sunnyvale.local.test",
+    "SUPPORT_EMAIL": "admin@sunnyvale.local.test",
+    "SIGNUPS": "closed",
+    "EMAIL_PROVIDER": "console",
+    "BLOG_ENABLED": "1",
+    "TELEMETRY_ENABLED": "0"
+  }
+}
+

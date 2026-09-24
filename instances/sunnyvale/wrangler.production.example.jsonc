@@ -1,0 +1,39 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // Copy to wrangler.production.jsonc, fill the blank fields, and provision
+  // resources before deploying. Never use the local bootstrap on production.
+  "name": "sunnyvale-punctual",
+  "main": "../../src/index.ts",
+  "compatibility_date": "2026-08-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "../../assets" },
+  "d1_databases": [{
+    "binding": "DB", "database_name": "sunnyvale-punctual",
+    "database_id": "", "migrations_dir": "../../migrations"
+  }],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "" }],
+  "r2_buckets": [{ "binding": "AVATARS", "bucket_name": "sunnyvale-punctual-avatars" }],
+  "durable_objects": { "bindings": [
+    { "name": "HOST_CALENDAR", "class_name": "HostCalendar" },
+    { "name": "RATE_LIMITER", "class_name": "RateLimiter" }
+  ] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HostCalendar", "RateLimiter"] }],
+  "triggers": { "crons": ["*/5 * * * *"] },
+  // Queues are optional: Punctual delivers inline without a TASKS binding.
+  // A configured email provider is required for real customer notifications.
+  "vars": {
+    "EMAIL_PROVIDER": "resend",
+    "BASE_URL": "",
+    "BRAND_NAME": "Sunnyvale Discount Smog",
+    "LEGAL_OPERATOR": "",
+    "FROM_NAME": "Sunnyvale Discount Smog",
+    "FROM_EMAIL": "",
+    "SUPPORT_EMAIL": "",
+    // Before first sign-in, replace closed with the owner's exact email.
+    // The first allowed user becomes admin. Set closed again afterward.
+    "SIGNUPS": "closed",
+    "BLOG_ENABLED": "1",
+    "TELEMETRY_ENABLED": "0"
+  }
+}
+

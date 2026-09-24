@@ -59,7 +59,7 @@ import { avatarHtml, escapeHtml, hostsSentence, joinNames, logoHtml, shellFoot, 
 /** Form field carrying the double-submit token. Routes read the same name. */
 export const CSRF_FIELD = 'csrf'
 
-export type NavKey = 'events' | 'bookings' | 'availability' | 'teams' | 'connections' | 'keys' | 'settings' | 'admin'
+export type NavKey = 'events' | 'bookings' | 'availability' | 'teams' | 'connections' | 'keys' | 'settings' | 'admin' | 'blog'
 
 const NAV: ReadonlyArray<{ key: NavKey; href: string; label: string }> = [
   { key: 'events', href: '/dashboard', label: 'Event types' },
@@ -73,6 +73,7 @@ const NAV: ReadonlyArray<{ key: NavKey; href: string; label: string }> = [
   // routes behind it are gated separately — hiding a link is not access
   // control.
   { key: 'admin', href: '/dashboard/admin', label: 'Admin' },
+  { key: 'blog', href: '/dashboard/blog', label: 'Blog' },
 ]
 
 /** Common shape of every authenticated page. */
@@ -99,6 +100,8 @@ export interface DashboardChrome {
   emailDelivery: EmailDelivery
   /** See `EngineConfig.emailProblem`: the named provider could not be used. */
   emailProblem?: string
+  /** Optional instance blog; the navigation is also restricted to admins. */
+  blogEnabled?: boolean
 }
 
 /**
@@ -138,8 +141,11 @@ export function csrfField(csrf: string): string {
  * any `<img>` on any page on the internet, and the CSRF token cannot travel on
  * a link the user might bookmark.
  */
-function shellTop(chrome: DashboardChrome, title: string, active: NavKey | null): string {
-  const links = NAV.filter((item) => item.key !== 'admin' || chrome.user.role === 'admin')
+export function shellTop(chrome: DashboardChrome, title: string, active: NavKey | null): string {
+  const links = NAV.filter((item) =>
+    item.key === 'blog' ? chrome.blogEnabled && chrome.user.role === 'admin'
+      : item.key !== 'admin' || chrome.user.role === 'admin',
+  )
     .map((item) => {
       const current = item.key === active ? ' aria-current="page"' : ''
       return `<a class="pu-nav-link" href="${item.href}"${current}>${escapeHtml(item.label)}</a>`
@@ -176,7 +182,7 @@ function blankNameNotice(chrome: DashboardChrome, active: NavKey | null): string
   <a href="/dashboard/settings">Settings</a></p>`
 }
 
-function shellBottom(brandName: string): string {
+export function shellBottom(brandName: string): string {
   // A utility footer, not the marketing one: the host already knows what
   // powers this — what they reach for down here is the documentation. The
   // wordmark links home; every other link is a page the engine serves
@@ -3167,7 +3173,6 @@ function trimSlash(url: string): string {
 // ---------------------------------------------------------------------------
 
 export interface AdminPageData extends DashboardChrome {
-  blogEnabled?: boolean
   /** Every user on the instance, oldest first. */
   allUsers: User[]
   /**

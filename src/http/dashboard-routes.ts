@@ -174,6 +174,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
   const brandName = ports.config.brandName
   // Closed over beside brandName because it travels with it into every
   // DashboardChrome literal below — see emailWarningBanner in pages/dashboard.ts.
+  const blogEnabled = ports.config.blogEnabled
   const emailDelivery = ports.config.emailDelivery
   const emailProblem = ports.config.emailProblem
   const secureCookies = ports.config.baseUrl.startsWith('https://')
@@ -594,7 +595,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         brandName,
         user,
         csrf: c.get('csrf'),
-        emailDelivery,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         eventTypes,
         upcomingBookings,
@@ -616,7 +617,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         brandName,
         user: c.get('user'),
         csrf: c.get('csrf'),
-        emailDelivery,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         teams: await managedTeams(c),
         schedules: await c.get('repos').availability.listForUser(c.get('user').id),
@@ -632,7 +633,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         brandName,
         user: c.get('user'),
         csrf: c.get('csrf'),
-        emailDelivery,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         eventType,
         teams: await managedTeams(c),
@@ -798,7 +799,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
           brandName,
           user,
           csrf: c.get('csrf'),
-          emailDelivery,
+          emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
           eventType: draft,
           questionsText,
@@ -884,7 +885,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
           brandName,
           user,
           csrf: c.get('csrf'),
-          emailDelivery,
+          emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
           eventType: draft,
           questionsText: read.questionsText,
@@ -904,7 +905,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
           brandName,
           user,
           csrf: c.get('csrf'),
-          emailDelivery,
+          emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
           eventType: draft,
           questionsText: read.questionsText,
@@ -930,7 +931,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
             brandName,
             user,
             csrf: c.get('csrf'),
-            emailDelivery,
+            emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
             eventType: draft,
             questionsText: read.questionsText,
@@ -959,7 +960,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
       brandName,
       user: c.get('user'),
       csrf: c.get('csrf'),
-      emailDelivery,
+      emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
       eventType,
       teams: await managedTeams(c),
@@ -1022,7 +1023,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
           brandName,
           user: c.get('user'),
           csrf: c.get('csrf'),
-          emailDelivery,
+          emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
           eventType: existing,
           teams: await managedTeams(c),
@@ -1137,7 +1138,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
       brandName,
       user: c.get('user'),
       csrf: c.get('csrf'),
-      emailDelivery,
+      emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
       schedules,
       creatorNames,
@@ -1220,7 +1221,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
       brandName,
       user: c.get('user'),
       csrf: c.get('csrf'),
-      emailDelivery,
+      emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
       schedule,
       ...(who.scope ? { scope: who.scope } : {}),
@@ -1516,7 +1517,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
    * for an instance admin every other team on the instance as well, marked
    * as such.
    */
-  async function teamsData(c: Ctx): Promise<Pick<TeamsPageData, 'brandName' | 'user' | 'csrf' | 'emailDelivery' | 'teams'>> {
+  async function teamsData(c: Ctx): Promise<Pick<TeamsPageData, 'brandName' | 'user' | 'csrf' | 'emailDelivery' | 'blogEnabled' | 'teams'>> {
     const repos = c.get('repos')
     const user = c.get('user')
     const memberships = await repos.teams.memberships(user.id)
@@ -1539,7 +1540,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         if (!seen.has(team.id)) views.push(await view(team, true))
       }
     }
-    return { brandName, user, csrf: c.get('csrf'), emailDelivery, ...(emailProblem ? { emailProblem } : {}), teams: views }
+    return { brandName, user, csrf: c.get('csrf'), emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}), teams: views }
   }
 
   /**
@@ -1876,7 +1877,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         brandName,
         user,
         csrf: c.get('csrf'),
-        emailDelivery,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         connections: views,
         availableProviders: ports.calendars.available(),
@@ -1956,7 +1957,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
     const user = c.get('user')
     const keys = await c.get('repos').apiKeys.listForUser(user.id)
     return c.html(apiKeysPage({ brandName, user, csrf: c.get('csrf'),
- emailDelivery, ...(emailProblem ? { emailProblem } : {}), keys }))
+ emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}), keys }))
   })
 
   /**
@@ -1989,7 +1990,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
           brandName,
           user,
           csrf: c.get('csrf'),
-          emailDelivery,
+          emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
           keys,
           nameValue: name,
@@ -2008,7 +2009,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
 
     const keys = await repos.apiKeys.listForUser(user.id)
     return c.html(apiKeysPage({ brandName, user, csrf: c.get('csrf'),
- emailDelivery, ...(emailProblem ? { emailProblem } : {}), keys, newKey: created.raw }))
+ emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}), keys, newKey: created.raw }))
   })
 
   /**
@@ -2021,7 +2022,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
     const id = c.req.param('id') ?? ''
     const apiKey = (await c.get('repos').apiKeys.listForUser(user.id)).find((k) => k.id === id)
     if (!apiKey) return notFound(c)
-    return c.html(revokeKeyPage({ brandName, user, csrf: c.get('csrf'), emailDelivery, ...(emailProblem ? { emailProblem } : {}), apiKey }))
+    return c.html(revokeKeyPage({ brandName, user, csrf: c.get('csrf'), emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}), apiKey }))
   })
 
   app.post('/dashboard/api-keys/:id/delete', requireSession, async (c) => {
@@ -2043,7 +2044,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
   // ===========================================================================
 
   app.get('/dashboard/settings', requireSession, (c) =>
-    c.html(settingsPage({ brandName, baseUrl: ports.config.baseUrl, user: c.get('user'), csrf: c.get('csrf'), emailDelivery, ...(emailProblem ? { emailProblem } : {}) })),
+    c.html(settingsPage({ brandName, baseUrl: ports.config.baseUrl, user: c.get('user'), csrf: c.get('csrf'), emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}) })),
   )
 
   app.post('/dashboard/settings', requireSession, async (c) => {
@@ -2090,7 +2091,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
     if (Object.keys(errors).length > 0) {
       return c.html(
         settingsPage({ brandName, baseUrl: ports.config.baseUrl, user, csrf: c.get('csrf'),
- emailDelivery, ...(emailProblem ? { emailProblem } : {}), slugValue: raw, errors }),
+ emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}), slugValue: raw, errors }),
         400,
       )
     }
@@ -2115,7 +2116,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
             baseUrl: ports.config.baseUrl,
             user,
             csrf: c.get('csrf'),
-            emailDelivery,
+            emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
             slugValue: raw,
             errors: { slug: 'That slug is already taken' },
@@ -2132,7 +2133,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         baseUrl: ports.config.baseUrl,
         user: { ...user, slug: raw },
         csrf: c.get('csrf'),
-        emailDelivery,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         notice: 'Slug updated. Links using the old address now show "not found".',
       }),
@@ -2174,7 +2175,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
           baseUrl: ports.config.baseUrl,
           user,
           csrf: c.get('csrf'),
-          emailDelivery,
+          emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
           nameValue: name,
           jobTitleValue: jobTitleRaw,
@@ -2200,7 +2201,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         baseUrl: ports.config.baseUrl,
         user: { ...user, name, company, jobTitle, companyUrl },
         csrf: c.get('csrf'),
-        emailDelivery,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         notice: 'Profile updated.',
       }),
@@ -2273,7 +2274,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
     const user = c.get('user')
     const fail = (message: string) =>
       c.html(settingsPage({ brandName, baseUrl: ports.config.baseUrl, user, csrf: c.get('csrf'),
- emailDelivery, ...(emailProblem ? { emailProblem } : {}), errors: { avatar: message } }), 400)
+ emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}), errors: { avatar: message } }), 400)
 
     const stored = await storeUploadedImage(form.get('avatar'))
     if (!stored.ok) return fail(stored.message)
@@ -2289,7 +2290,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         baseUrl: ports.config.baseUrl,
         user: { ...user, avatarKey: thumbKey },
         csrf: c.get('csrf'),
-        emailDelivery,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         notice: 'Photo updated.',
       }),
@@ -2314,7 +2315,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         baseUrl: ports.config.baseUrl,
         user: { ...user, avatarKey: null },
         csrf: c.get('csrf'),
-        emailDelivery,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         notice: 'Photo removed.',
       }),
@@ -2340,8 +2341,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         brandName,
         user: c.get('user'),
         csrf: c.get('csrf'),
-        emailDelivery,
-        blogEnabled: ports.config.blogEnabled,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         allUsers: await repos.users.listAll(),
         signups: { value, pinnedByEnv },
@@ -2378,7 +2378,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
     app.use(route, requireBlog, requireSession, requireAdmin, bodyLimit({ maxSize: 512_000 }))
   }
   const blogPage = async (c: Ctx, edit?: Awaited<ReturnType<Repositories['blog']['byId']>>) =>
-    c.html(blogAdminPage(brandName, c.get('user'), c.get('csrf'), await c.get('repos').blog.list(), edit ?? undefined))
+    c.html(blogAdminPage({ brandName, user: c.get('user'), csrf: c.get('csrf'), emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}) }, await c.get('repos').blog.list(), edit ?? undefined))
 
   app.get('/dashboard/blog', (c) => blogPage(c))
   app.get('/dashboard/blog/new', (c) => blogPage(c))
@@ -2605,7 +2605,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
       .filter(({ owner }) => user.role === 'admin' || (owner.kind === 'user' ? owner.id === user.id : teamIds.has(owner.id)))
       .map(({ eventType, owner }) => ({ eventType, ownerSlug: owner.slug, ...(owner.kind === 'team' ? { teamName: owner.name } : {}) }))
     return c.html(newBookingPage({
-      brandName, user, csrf: c.get('csrf'), emailDelivery,
+      brandName, user, csrf: c.get('csrf'), emailDelivery, blogEnabled,
       ...(emailProblem ? { emailProblem } : {}),
       eventTypes,
     }))
@@ -2651,7 +2651,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         brandName,
         user,
         csrf: c.get('csrf'),
-        emailDelivery,
+        emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         view,
         rows,
@@ -2744,7 +2744,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
       brandName,
       user,
       csrf: c.get('csrf'),
-      emailDelivery,
+      emailDelivery, blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
       booking,
       eventType,
@@ -2851,7 +2851,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
   app.get('/dashboard/bookings/:id/reschedule', requireSession, async (c) => {
     const access = await hostBookingAccess(c)
     if (!access) return notFound(c)
-    const chrome = { brandName, user: c.get('user'), csrf: c.get('csrf'), emailDelivery, ...(emailProblem ? { emailProblem } : {}) }
+    const chrome = { brandName, user: c.get('user'), csrf: c.get('csrf'), emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}) }
     const base = { ...chrome, booking: access.booking, eventType: access.eventType }
 
     const blocked = rescheduleBlocker(access, ports.clock.now(), 'moved')
@@ -2872,7 +2872,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
     if (!access) return notFound(c)
     const repos = c.get('repos')
     const user = c.get('user')
-    const base = { brandName, user, csrf: c.get('csrf'), emailDelivery, ...(emailProblem ? { emailProblem } : {}), booking: access.booking, eventType: access.eventType }
+    const base = { brandName, user, csrf: c.get('csrf'), emailDelivery, blogEnabled, ...(emailProblem ? { emailProblem } : {}), booking: access.booking, eventType: access.eventType }
 
     const blocked = rescheduleBlocker(access, ports.clock.now(), 'moved')
     const eventType = access.eventType
