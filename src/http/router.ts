@@ -20,6 +20,7 @@ import { buildDashboardRoutes } from './dashboard-routes.js'
 import { buildOgRoutes } from './og/route.js'
 import { buildAvatarRoutes } from './avatars/route.js'
 import { privacyPage, termsPage } from './pages/legal.js'
+import { blogListPage, blogPostPage } from './pages/blog.js'
 import { calendlyAlternativePage, landingPage } from './pages/landing.js'
 import { instanceHomePage } from './pages/home.js'
 import { HOME_KEYS, homeFeatured, homeGroups, homeItems, parseHomeSettings, withTeamPeople } from '../core/domain/home.js'
@@ -168,6 +169,18 @@ export function buildRouter(ports: EnginePorts, slots: SlotService): Hono<{ Bind
       }),
     ),
   )
+
+  if (ports.config.blogEnabled) {
+    app.get('/blog', async (c) => {
+      const posts = await ports.repositories(publicScope).blog.list(true)
+      return c.html(blogListPage(ports.config.brandName, posts))
+    })
+    app.get('/blog/:slug', async (c) => {
+      const post = await ports.repositories(publicScope).blog.bySlug(c.req.param('slug'), true)
+      if (!post) return notFound(c, ports)
+      return c.html(blogPostPage(ports.config.brandName, post))
+    })
+  }
 
   // Programmatic surfaces. Mounted before the /:userSlug/:eventSlug catch-all
   // so a host cannot claim the slug "api" and shadow them.

@@ -3152,6 +3152,7 @@ function trimSlash(url: string): string {
 // ---------------------------------------------------------------------------
 
 export interface AdminPageData extends DashboardChrome {
+  blogEnabled?: boolean
   /** Every user on the instance, oldest first. */
   allUsers: User[]
   /**
@@ -3299,6 +3300,7 @@ export function adminPage(d: AdminPageData): string {
     `<section aria-label="Admin">
   <h1>Admin</h1>
   <p class="pu-muted">Who may join this instance, and who runs it.</p>
+${d.blogEnabled ? '<p class="pu-notice"><a href="/dashboard/blog">Manage blog posts</a></p>' : ''}
 <section class="pu-card" aria-label="Sign-ups" style="margin-bottom:1.25rem">
   <h2>Sign-ups</h2>
   <p class="pu-muted">Who may create an account on this instance. Existing users always sign in.</p>

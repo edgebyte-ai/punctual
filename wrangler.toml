@@ -97,6 +97,8 @@ crons = ["*/5 * * * *"]
 # custom domain. Used in every link the engine writes into emails and .ics.
 BASE_URL = "https://punctual.YOUR-SUBDOMAIN.workers.dev"
 BRAND_NAME = "Punctual"
+# Optional per-instance blog. Keep 0/unset for apps that do not need it.
+#BLOG_ENABLED = "1"
 # Optional: the legal entity named on /privacy and /terms (defaults to
 # BRAND_NAME), and a live booking page to embed on your landing page.
 #LEGAL_OPERATOR = "Your Company Ltd"

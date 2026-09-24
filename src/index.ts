@@ -44,6 +44,8 @@ export interface Env {
   DEMO_BOOKING_PATH?: string
   /** GA4 measurement id for the marketing/docs pages only — see EngineConfig.analyticsId in ports.ts. */
   GA_MEASUREMENT_ID?: string
+  /** Set to 1 to expose the optional blog and its admin CRUD. */
+  BLOG_ENABLED?: string
   /** Signup policy: unset/"open", "closed", or a comma list of emails/@domains — see `SignupPolicy` in ports.ts. Set as a secret/var per deployment; never a public-repo default, which would lock a fresh self-hoster out of their own instance. */
   SIGNUPS?: string
   FROM_EMAIL?: string
@@ -192,6 +194,7 @@ export function buildPorts(env: Env): EnginePorts {
       emailDelivery,
       ...(emailProblem ? { emailProblem } : {}),
       telemetryEnabled: env.TELEMETRY_ENABLED === '1',
+      blogEnabled: env.BLOG_ENABLED === '1',
     },
     // Constructed last: it needs the other ports.
     coordinator: undefined as never,

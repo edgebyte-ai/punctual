@@ -92,6 +92,7 @@ import { MAX_DECODED_PIXELS,
   thumbKeyFor, fitKeyFor, originalKeyCandidates, isLogoShape, COMPANY_LOGO_KEY, COMPANY_LOGO_SHAPE, companyLogoFrom } from '../core/domain/media.js'
 import { resizeToFitThumbnail, resizeToSquareThumbnail } from '../adapters/image/resize.js'
 import { errorPage, shellFoot, shellHead } from './pages/booking.js'
+import { blogAdminPage } from './pages/blog.js'
 import {
   CSRF_FIELD,
   MAX_RANGES_PER_DAY,
@@ -151,6 +152,7 @@ type Ctx = Context<{ Bindings: Env; Variables: Vars }>
 /** Slugs the router needs for itself; an event type may not claim them. */
 const RESERVED_SLUGS = new Set([
   'auth',
+  'blog',
   'booking',
   'dashboard',
   'favicon.svg',
@@ -2337,6 +2339,7 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
         user: c.get('user'),
         csrf: c.get('csrf'),
         emailDelivery,
+        blogEnabled: ports.config.blogEnabled,
         ...(emailProblem ? { emailProblem } : {}),
         allUsers: await repos.users.listAll(),
         signups: { value, pinnedByEnv },
@@ -2358,6 +2361,71 @@ export function buildDashboardRoutes(ports: EnginePorts, slots: SlotService): Ap
     const [key, shape] = await Promise.all([repos.settings.get(COMPANY_LOGO_KEY), repos.settings.get(COMPANY_LOGO_SHAPE)])
     return companyLogoFrom(key, shape)
   }
+
+  // ===========================================================================
+  // Optional blog — instance admins only
+  // ===========================================================================
+
+  const blogUnavailable = (c: Ctx) => c.html(errorPage('Not found', 'The blog is not enabled on this instance.'), 404)
+  const blogPage = async (c: Ctx, edit?: Awaited<ReturnType<Repositories['blog']['byId']>>) => {
+    if (!ports.config.blogEnabled) return blogUnavailable(c)
+    return c.html(blogAdminPage(brandName, c.get('user'), c.get('csrf'), await c.get('repos').blog.list(), edit ?? undefined))
+  }
+
+  app.get('/dashboard/blog', requireSession, requireAdmin, (c) => blogPage(c))
+  app.get('/dashboard/blog/new', requireSession, requireAdmin, (c) => blogPage(c))
+  app.get('/dashboard/blog/:id/edit', requireSession, requireAdmin, async (c) => {
+    const post = await c.get('repos').blog.byId(c.req.param('id'))
+    if (!post) return c.redirect('/dashboard/blog', 302)
+    return blogPage(c, post)
+  })
+
+  async function parseBlogForm(c: Ctx): Promise<{ slug: string; title: string; excerpt: string; content: string; published: boolean } | null> {
+    const form = await c.req.formData()
+    if (!(await csrfOk(c, form))) return null
+    const slug = String(form.get('slug') ?? '').trim().toLowerCase()
+    const title = String(form.get('title') ?? '').trim()
+    const excerpt = String(form.get('excerpt') ?? '').replace(/\r\n?/g, '\n').trim()
+    const content = String(form.get('content') ?? '').replace(/\r\n?/g, '\n').trim()
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 120 || title.length < 1 || title.length > 200 || excerpt.length > 500 || content.length < 1 || content.length > 100_000) return null
+    return { slug, title, excerpt, content, published: form.get('published') === '1' }
+  }
+
+  app.post('/dashboard/blog', requireSession, requireAdmin, async (c) => {
+    if (!ports.config.blogEnabled) return blogUnavailable(c)
+    const parsed = await parseBlogForm(c)
+    if (!parsed) return c.html(errorPage('Invalid post', 'Check the title, slug and content, then try again.'), 400)
+    const now = ports.clock.now()
+    try {
+      await c.get('repos').blog.create({ id: ports.crypto.randomToken(18), ...parsed, createdAt: now, updatedAt: now, publishedAt: parsed.published ? now : null })
+    } catch {
+      return c.html(errorPage('Could not save post', 'That slug is already in use.'), 409)
+    }
+    await advanceBookmark(c)
+    return c.redirect('/dashboard/blog', 303)
+  })
+
+  app.post('/dashboard/blog/:id', requireSession, requireAdmin, async (c) => {
+    if (!ports.config.blogEnabled) return blogUnavailable(c)
+    const parsed = await parseBlogForm(c)
+    if (!parsed) return c.html(errorPage('Invalid post', 'Check the title, slug and content, then try again.'), 400)
+    try {
+      await c.get('repos').blog.update(c.req.param('id'), parsed, ports.clock.now())
+    } catch {
+      return c.html(errorPage('Could not save post', 'That slug is already in use.'), 409)
+    }
+    await advanceBookmark(c)
+    return c.redirect('/dashboard/blog', 303)
+  })
+
+  app.post('/dashboard/blog/:id/delete', requireSession, requireAdmin, async (c) => {
+    if (!ports.config.blogEnabled) return blogUnavailable(c)
+    const form = await c.req.formData()
+    if (!(await csrfOk(c, form))) return csrfRejected(c)
+    await c.get('repos').blog.delete(c.req.param('id'))
+    await advanceBookmark(c)
+    return c.redirect('/dashboard/blog', 303)
+  })
 
   app.get('/dashboard/admin', requireSession, requireAdmin, (c) => renderAdmin(c))
 

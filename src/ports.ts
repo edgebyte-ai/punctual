@@ -60,6 +60,7 @@ export interface Repositories {
   webhooks: WebhookRepository
   idempotency: IdempotencyRepository
   settings: SettingsRepository
+  blog: BlogRepository
 
   /** Counts for the opt-in telemetry ping (ADR-0006 §5). Nothing identifying. */
   telemetryCounts(): Promise<{ users: number; eventTypes: number; bookings: number }>
@@ -70,6 +71,27 @@ export interface Repositories {
    * than their own last edit. Null when nothing was written.
    */
   bookmark(): string | null
+}
+
+export interface BlogPost {
+  id: string
+  slug: string
+  title: string
+  excerpt: string
+  content: string
+  published: boolean
+  createdAt: number
+  updatedAt: number
+  publishedAt: number | null
+}
+
+export interface BlogRepository {
+  list(publishedOnly?: boolean): Promise<BlogPost[]>
+  bySlug(slug: string, publishedOnly?: boolean): Promise<BlogPost | null>
+  byId(id: string): Promise<BlogPost | null>
+  create(post: BlogPost): Promise<void>
+  update(id: string, patch: Pick<BlogPost, 'slug' | 'title' | 'excerpt' | 'content' | 'published'>, now: number): Promise<void>
+  delete(id: string): Promise<void>
 }
 
 export interface UserRepository {
@@ -902,6 +924,8 @@ export interface EngineConfig {
    * injected, and never one pointed at this project's own GA property.
    */
   analyticsId?: string
+  /** Optional blog module. Disabled unless BLOG_ENABLED=1 is set. */
+  blogEnabled: boolean
 }
 
 // ---------------------------------------------------------------------------

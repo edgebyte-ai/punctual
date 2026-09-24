@@ -34,6 +34,8 @@ import type {
 import type {
   ApiKeyRepository,
   AvailabilityRepository,
+  BlogPost,
+  BlogRepository,
   BookingRepository,
   CalendarConnectionRepository,
   EventTypeHostRepository,
@@ -1536,9 +1538,48 @@ export function createD1Repositories(db: D1Database, scope: RequestScope): Repos
     },
   }
 
+  const blog: BlogRepository = {
+    async list(publishedOnly = false) {
+      const where = publishedOnly ? ' WHERE published = 1' : ''
+      const rows = await all<Record<string, unknown>>(`SELECT * FROM blog_posts${where} ORDER BY published_at DESC, updated_at DESC`)
+      return rows.map(mapBlogPost)
+    },
+    async bySlug(slug, publishedOnly = false) {
+      const row = await first<Record<string, unknown>>(
+        `SELECT * FROM blog_posts WHERE slug = ?${publishedOnly ? ' AND published = 1' : ''}`,
+        slug,
+      )
+      return row ? mapBlogPost(row) : null
+    },
+    async byId(id) {
+      const row = await first<Record<string, unknown>>('SELECT * FROM blog_posts WHERE id = ?', id)
+      return row ? mapBlogPost(row) : null
+    },
+    async create(post) {
+      await run(
+        `INSERT INTO blog_posts (id, slug, title, excerpt, content, published, created_at, updated_at, published_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        , post.id, post.slug, post.title, post.excerpt, post.content, post.published ? 1 : 0,
+        post.createdAt, post.updatedAt, post.published ? post.updatedAt : null,
+      )
+    },
+    async update(id, patch, now) {
+      await run(
+        `UPDATE blog_posts SET slug = ?, title = ?, excerpt = ?, content = ?, published = ?,
+           updated_at = ?, published_at = CASE WHEN ? = 1 AND published_at IS NULL THEN ? ELSE published_at END
+         WHERE id = ?`,
+        patch.slug, patch.title, patch.excerpt, patch.content, patch.published ? 1 : 0,
+        now, patch.published ? 1 : 0, now, id,
+      )
+    },
+    async delete(id) {
+      await run('DELETE FROM blog_posts WHERE id = ?', id)
+    },
+  }
+
   return {
     users, eventTypes, availability, bookings, slotLocks, teams, eventTypeHosts, connections,
-    sessions, apiKeys, webhooks, idempotency, settings,
+    sessions, apiKeys, webhooks, idempotency, settings, blog,
     async telemetryCounts() {
       const row = await first<{ users: number; event_types: number; bookings: number }>(
         `SELECT
@@ -1559,6 +1600,20 @@ export function createD1Repositories(db: D1Database, scope: RequestScope): Repos
 // ---------------------------------------------------------------------------
 // Row mapping
 // ---------------------------------------------------------------------------
+
+function mapBlogPost(row: Record<string, unknown>): BlogPost {
+  return {
+    id: String(row.id),
+    slug: String(row.slug),
+    title: String(row.title),
+    excerpt: String(row.excerpt ?? ''),
+    content: String(row.content ?? ''),
+    published: Number(row.published) === 1,
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+    publishedAt: row.published_at == null ? null : Number(row.published_at),
+  }
+}
 
 function groupBuckets(rows: Array<{ host_user_id: string; bucket_start: number }>): Map<string, number[]> {
   const out = new Map<string, number[]>()

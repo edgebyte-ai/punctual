@@ -356,6 +356,7 @@ export function createFakeRepositories(): FakeRepositories {
     webhooks: unimplemented('webhooks'),
     idempotency: unimplemented('idempotency'),
     settings: createFakeSettings(),
+    blog: unimplemented('blog'),
     bookmark() {
       return lastBookmark
     },
@@ -468,6 +469,7 @@ export function fakeConfig(overrides: Partial<EngineConfig> = {}): EngineConfig 
     // render the not-configured banner. Tests that want it override this.
     emailDelivery: 'brevo',
     telemetryEnabled: false,
+    blogEnabled: false,
     ...overrides,
   }
 }
